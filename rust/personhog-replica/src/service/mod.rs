@@ -40,7 +40,8 @@ use personhog_proto::personhog::types::v1::{
     PersonsResponse, SetPersonDistinctIdVersionFloorRequest,
     SetPersonDistinctIdVersionFloorResponse, SetPersonVersionFloorRequest,
     SetPersonVersionFloorResponse, SplitPersonRequest, SplitPersonResponse,
-    SplitResult as ProtoSplitResult, TeamDistinctId, UpdateGroupRequest, UpdateGroupResponse,
+    SplitResult as ProtoSplitResult, TeamDistinctId, TrimTombstonedPersonRequest,
+    TrimTombstonedPersonResponse, UpdateGroupRequest, UpdateGroupResponse,
     UpdateGroupTypeMappingRequest, UpdateGroupTypeMappingResponse, UpsertHashKeyOverridesRequest,
     UpsertHashKeyOverridesResponse,
 };
@@ -63,6 +64,9 @@ use field_mask::{
     apply_group_field_mask, apply_person_field_mask, build_field_mask, group_needs_properties,
     person_needs_properties,
 };
+
+/// Rows one TrimTombstonedPerson call deletes when the request leaves max_rows at 0.
+const TRIM_DEFAULT_ROWS: i64 = 5000;
 
 pub struct PersonHogReplicaService {
     storage: Arc<dyn FullStorage>,
@@ -470,6 +474,34 @@ impl PersonHogReplica for PersonHogReplicaService {
                 .iter()
                 .map(ToString::to_string)
                 .collect(),
+        }))
+    }
+
+    async fn trim_tombstoned_person(
+        &self,
+        request: Request<TrimTombstonedPersonRequest>,
+    ) -> Result<Response<TrimTombstonedPersonResponse>, Status> {
+        let req = request.into_inner();
+        let uuid = Uuid::parse_str(&req.person_uuid)
+            .map_err(|e| Status::invalid_argument(format!("Invalid UUID: {e}")))?;
+        let max_rows = if req.max_rows <= 0 {
+            TRIM_DEFAULT_ROWS
+        } else {
+            req.max_rows
+        };
+
+        let outcome = self
+            .storage
+            .trim_tombstoned_person(req.team_id, uuid, max_rows)
+            .await
+            .map_err(|e| log_and_convert_error(e, "trim_tombstoned_person"))?;
+
+        Ok(Response::new(TrimTombstonedPersonResponse {
+            person_tombstoned: outcome.person_tombstoned,
+            distinct_ids_deleted: outcome.distinct_ids_deleted,
+            hash_key_overrides_deleted: outcome.hash_key_overrides_deleted,
+            cohort_memberships_deleted: outcome.cohort_memberships_deleted,
+            over_cap: outcome.over_cap,
         }))
     }
 

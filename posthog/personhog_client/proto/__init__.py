@@ -72,6 +72,8 @@ from posthog.personhog_client.proto.generated.personhog.types.v1.person_pb2 impo
     DeletePersonsResponse,
     DeleteTombstonedPersonsRequest,
     DeleteTombstonedPersonsResponse,
+    TrimTombstonedPersonRequest,
+    TrimTombstonedPersonResponse,
     GetDistinctIdsForPersonRequest,
     GetDistinctIdsForPersonResponse,
     GetDistinctIdsForPersonsRequest,

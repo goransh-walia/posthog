@@ -20,7 +20,7 @@ use tracing_subscriber::EnvFilter;
 use personhog_common::{spawn_pool_monitor, MonitoredPool};
 use personhog_replica::config::Config;
 use personhog_replica::service::PersonHogReplicaService;
-use personhog_replica::storage::postgres::PostgresStorage;
+use personhog_replica::storage::postgres::{PostgresStorage, TombstonedDeleteLimits};
 
 common_alloc::used!();
 
@@ -98,8 +98,19 @@ async fn create_storage(config: &Config) -> Arc<PostgresStorage> {
                 "BULK_CHUNK_SIZE must be at least 1"
             );
             assert!(
-                config.tombstoned_delete_max_distinct_ids >= 1,
-                "TOMBSTONED_DELETE_MAX_DISTINCT_IDS must be at least 1"
+                config.tombstoned_delete_max_dependent_rows >= 1,
+                "TOMBSTONED_DELETE_MAX_DEPENDENT_ROWS must be at least 1"
+            );
+            assert!(
+                config.tombstoned_delete_max_rows_per_transaction
+                    >= 3 * config.tombstoned_delete_max_dependent_rows,
+                "TOMBSTONED_DELETE_MAX_ROWS_PER_TRANSACTION ({}) must be at least three times TOMBSTONED_DELETE_MAX_DEPENDENT_ROWS ({}) so any one person fits",
+                config.tombstoned_delete_max_rows_per_transaction,
+                config.tombstoned_delete_max_dependent_rows
+            );
+            assert!(
+                config.tombstoned_trim_max_rows >= 1,
+                "TOMBSTONED_TRIM_MAX_ROWS must be at least 1"
             );
             assert!(
                 config.bulk_max_concurrent_chunks >= 1,
@@ -119,7 +130,11 @@ async fn create_storage(config: &Config) -> Arc<PostgresStorage> {
                 bulk_replica_pool,
                 config.bulk_chunk_size,
                 config.bulk_max_concurrent_chunks,
-                config.tombstoned_delete_max_distinct_ids,
+                TombstonedDeleteLimits {
+                    max_dependent_rows: config.tombstoned_delete_max_dependent_rows,
+                    max_rows_per_transaction: config.tombstoned_delete_max_rows_per_transaction,
+                    trim_max_rows: config.tombstoned_trim_max_rows,
+                },
             ))
         }
         other => {

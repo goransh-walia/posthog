@@ -233,10 +233,36 @@ message DeleteTombstonedPersonsResponse {
   // Persons still tombstoned but referenced by a live distinct id. Nothing was
   // deleted for them; the caller must not treat them as cleaned.
   repeated string blocked_person_uuids = 3;
-  // Persons still tombstoned but owning more distinct ids than one delete
-  // transaction may touch (replica setting TOMBSTONED_DELETE_MAX_DISTINCT_IDS).
-  // Nothing was deleted for them; the caller must not treat them as cleaned.
+  // Persons still tombstoned but owning more rows in a dependent table (distinct
+  // ids, hash key overrides or cohort memberships) than one delete transaction may
+  // touch (replica setting TOMBSTONED_DELETE_MAX_DEPENDENT_ROWS). Nothing was
+  // deleted for them; trim them with TrimTombstonedPerson, then send them again.
   repeated string oversized_person_uuids = 4;
+}
+
+// TrimTombstonedPersonRequest deletes up to max_rows dependent rows of one
+// tombstoned person in one short transaction under the person's row lock:
+// tombstoned distinct ids first, then hash key overrides, then cohort
+// memberships. Call it until over_cap is false, then DeleteTombstonedPersons
+// finishes the person. A live or missing person is left untouched. Idempotent.
+message TrimTombstonedPersonRequest {
+  int64 team_id = 1;
+  string person_uuid = 2;
+  // Rows to delete in this call. 0 means the server default; the server clamps
+  // the value to its own maximum (replica setting TOMBSTONED_TRIM_MAX_ROWS).
+  int64 max_rows = 3;
+}
+
+message TrimTombstonedPersonResponse {
+  // False when the person is live or missing. Nothing was deleted then.
+  bool person_tombstoned = 1;
+  int64 distinct_ids_deleted = 2;
+  int64 hash_key_overrides_deleted = 3;
+  int64 cohort_memberships_deleted = 4;
+  // A dependent table still holds more rows than the cap. When this is true
+  // and nothing was deleted, the remaining rows are live distinct ids: stop
+  // trimming, the person is blocked, not oversized.
+  bool over_cap = 5;
 }
 
 // SplitPersonRequest splits specific distinct_ids off of a person onto new persons.

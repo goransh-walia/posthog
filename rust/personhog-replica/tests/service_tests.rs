@@ -13,7 +13,7 @@ use personhog_proto::personhog::types::v1::{
     GetPersonRequest, GetPersonsByDistinctIdsInTeamRequest, GetPersonsByDistinctIdsRequest,
     GetPersonsByUuidsRequest, GetPersonsRequest, GroupIdentifier, GroupKey,
     SetPersonDistinctIdVersionFloorRequest, SetPersonVersionFloorRequest, SplitPersonRequest,
-    TeamDistinctId, UpsertHashKeyOverridesRequest,
+    TeamDistinctId, TrimTombstonedPersonRequest, UpsertHashKeyOverridesRequest,
 };
 use personhog_replica::service::PersonHogReplicaService;
 use rstest::rstest;
@@ -1304,6 +1304,41 @@ async fn test_delete_tombstoned_persons_reports_each_outcome() {
     assert!(ctx.person_row_exists(live.id).await.unwrap());
     assert!(ctx.person_row_exists(blocked.id).await.unwrap());
     assert!(ctx.person_row_exists(oversized.id).await.unwrap());
+
+    ctx.cleanup().await.ok();
+}
+
+#[tokio::test]
+async fn test_trim_tombstoned_person_reports_each_field() {
+    let ctx = ServiceTestContext::new().await;
+    let person = ctx.insert_person("svc_trim", None).await.unwrap();
+    for i in 0..3 {
+        ctx.add_distinct_id_to_person(person.id, &format!("svc_trim_{i}"))
+            .await
+            .unwrap();
+    }
+    ctx.tombstone_person(person.id, None).await.unwrap();
+
+    let response = ctx
+        .service
+        .trim_tombstoned_person(Request::new(TrimTombstonedPersonRequest {
+            team_id: ctx.team_id,
+            person_uuid: person.uuid.to_string(),
+            max_rows: 2,
+        }))
+        .await
+        .expect("RPC failed")
+        .into_inner();
+
+    assert!(response.person_tombstoned);
+    assert_eq!(response.distinct_ids_deleted, 2);
+    assert_eq!(response.hash_key_overrides_deleted, 0);
+    assert_eq!(response.cohort_memberships_deleted, 0);
+    assert!(
+        !response.over_cap,
+        "two rows remain, under the test cap of three"
+    );
+    assert_eq!(ctx.distinct_id_row_count(person.id).await.unwrap(), 2);
 
     ctx.cleanup().await.ok();
 }

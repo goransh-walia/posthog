@@ -84,6 +84,8 @@ from posthog.personhog_client.proto import (
     SetPersonVersionFloorResponse,
     SplitPersonRequest,
     SplitPersonResponse,
+    TrimTombstonedPersonRequest,
+    TrimTombstonedPersonResponse,
     UpdateGroupRequest,
     UpdateGroupResponse,
     UpdateGroupTypeMappingRequest,
@@ -222,6 +224,11 @@ class PersonHogClient:
         self, request: DeleteTombstonedPersonsRequest, timeout: float | None = None
     ) -> DeleteTombstonedPersonsResponse:
         return self._stub.DeleteTombstonedPersons(request, timeout=timeout or self._timeout)
+
+    def trim_tombstoned_person(
+        self, request: TrimTombstonedPersonRequest, timeout: float | None = None
+    ) -> TrimTombstonedPersonResponse:
+        return self._stub.TrimTombstonedPerson(request, timeout=timeout or self._timeout)
 
     # -- Person split --
 

@@ -77,6 +77,13 @@ const SERVICE_DEFAULTS: ServiceImpl<typeof PersonHogService> = {
         blockedPersonUuids: [],
         oversizedPersonUuids: [],
     }),
+    trimTombstonedPerson: () => ({
+        personTombstoned: false,
+        distinctIdsDeleted: 0n,
+        hashKeyOverridesDeleted: 0n,
+        cohortMembershipsDeleted: 0n,
+        overCap: false,
+    }),
     splitPerson: () => ({ splits: [] }),
     setPersonDistinctIdVersionFloor: () => ({}),
     setPersonVersionFloor: () => ({ updated: false }),

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT id::bigint AS \"id!\"\n                FROM posthog_featureflaghashkeyoverride\n                WHERE team_id = $1 AND person_id = $2\n                LIMIT $3\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "09556497192f1d47ce3cdca3e510634de1cc276e9f8769c31d06f1050615e35e"
+}

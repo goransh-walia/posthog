@@ -494,7 +494,7 @@ class TestFakePersonHogClientDeleteTombstonedPersons:
             tombstoned_distinct_ids=["b-1"],
         )
         # Also owns a live distinct id: oversized takes precedence over blocked.
-        self.client.max_distinct_ids_per_tombstoned_person = 2
+        self.client.max_dependent_rows_per_tombstoned_person = 2
         self.client.add_person(
             team_id=self.TEAM_ID,
             person_id=4,
@@ -561,3 +561,66 @@ class TestFakePersonHogClientDeleteTombstonedPersons:
         for uuid in ("tombstoned", "live", "blocked"):
             lookup = self.client.get_person_by_uuid(person_pb2.GetPersonByUuidRequest(team_id=self.TEAM_ID, uuid=uuid))
             assert not lookup.HasField("person")
+
+
+class TestFakePersonHogClientTrimTombstonedPerson:
+    TEAM_ID = 7
+
+    def setup_method(self):
+        self.client = FakePersonHogClient()
+        self.client.max_dependent_rows_per_tombstoned_person = 2
+        self.client.add_person(
+            team_id=self.TEAM_ID,
+            person_id=1,
+            uuid="oversized",
+            distinct_ids=["o-1", "o-2", "o-3", "o-4", "o-5"],
+            is_deleted=True,
+            tombstoned_distinct_ids=["o-1", "o-2", "o-3", "o-4", "o-5"],
+        )
+        self.client.add_person(team_id=self.TEAM_ID, person_id=2, uuid="live", distinct_ids=["l-1", "l-2", "l-3"])
+        self.client.add_person(
+            team_id=self.TEAM_ID,
+            person_id=3,
+            uuid="all-live-ids",
+            distinct_ids=["a-1", "a-2", "a-3"],
+            is_deleted=True,
+            tombstoned_distinct_ids=[],
+        )
+
+    def _trim(self, uuid: str, max_rows: int, team_id: int | None = None) -> person_pb2.TrimTombstonedPersonResponse:
+        return self.client.trim_tombstoned_person(
+            person_pb2.TrimTombstonedPersonRequest(
+                team_id=self.TEAM_ID if team_id is None else team_id, person_uuid=uuid, max_rows=max_rows
+            )
+        )
+
+    def test_trims_in_bounded_steps_until_under_the_cap_then_the_delete_finishes(self):
+        first = self._trim("oversized", 2)
+        assert (first.person_tombstoned, first.distinct_ids_deleted, first.over_cap) == (True, 2, True)
+
+        second = self._trim("oversized", 2)
+        assert (second.distinct_ids_deleted, second.over_cap) == (2, False), "one distinct id left, under the cap"
+
+        resp = self.client.delete_tombstoned_persons(
+            person_pb2.DeleteTombstonedPersonsRequest(team_id=self.TEAM_ID, person_uuids=["oversized"])
+        )
+        assert (resp.deleted_count, list(resp.oversized_person_uuids)) == (1, [])
+
+    def test_clamps_the_step_to_the_server_maximum(self):
+        self.client.trim_max_rows = 1
+
+        assert self._trim("oversized", 100).distinct_ids_deleted == 1
+
+    @pytest.mark.parametrize("uuid,team_id", [("live", None), ("unknown", None), ("oversized", 8)])
+    def test_touches_nothing_outside_a_tombstoned_person_of_the_team(self, uuid, team_id):
+        resp = self._trim(uuid, 10, team_id=team_id)
+
+        assert resp == person_pb2.TrimTombstonedPersonResponse()
+        assert self.client.get_person_by_distinct_id(
+            person_pb2.GetPersonByDistinctIdRequest(team_id=self.TEAM_ID, distinct_id="l-1")
+        ).HasField("person")
+
+    def test_live_distinct_ids_are_kept_and_reported_as_over_cap_with_nothing_deleted(self):
+        resp = self._trim("all-live-ids", 10)
+
+        assert (resp.person_tombstoned, resp.distinct_ids_deleted, resp.over_cap) == (True, 0, True)

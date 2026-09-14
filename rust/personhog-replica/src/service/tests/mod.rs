@@ -11,8 +11,8 @@ use personhog_proto::personhog::types::v1::{
     DeleteGroupTypeMappingsBatchForTeamRequest, DeleteGroupsBatchForTeamRequest,
     DeletePersonsBatchForTeamRequest, DeletePersonsRequest, DeleteTombstonedPersonsRequest,
     GetGroupRequest, GetPersonRequest, GetPersonsByDistinctIdsInTeamRequest,
-    InsertCohortMembersRequest, ListCohortMemberIdsRequest, UpdateGroupRequest,
-    UpdateGroupTypeMappingRequest,
+    InsertCohortMembersRequest, ListCohortMemberIdsRequest, TrimTombstonedPersonRequest,
+    UpdateGroupRequest, UpdateGroupTypeMappingRequest,
 };
 use rstest::rstest;
 use tonic::Request;
@@ -239,6 +239,44 @@ async fn test_delete_tombstoned_persons_invalid_input(
 
     assert_eq!(status.code(), tonic::Code::InvalidArgument);
     assert!(status.message().contains(expected_message));
+}
+
+#[rstest]
+#[case::connection_error(FailingStorage::with_connection_error(), tonic::Code::Unavailable)]
+#[case::query_error(FailingStorage::with_query_error(), tonic::Code::Internal)]
+#[tokio::test]
+async fn test_trim_tombstoned_person_storage_error(
+    #[case] storage: FailingStorage,
+    #[case] expected_code: tonic::Code,
+) {
+    let service = PersonHogReplicaService::new(Arc::new(storage));
+
+    let result = service
+        .trim_tombstoned_person(Request::new(TrimTombstonedPersonRequest {
+            team_id: 1,
+            person_uuid: "00000000-0000-0000-0000-000000000001".to_string(),
+            max_rows: 0,
+        }))
+        .await;
+
+    assert_eq!(result.unwrap_err().code(), expected_code);
+}
+
+#[tokio::test]
+async fn test_trim_tombstoned_person_rejects_an_invalid_uuid() {
+    let service = PersonHogReplicaService::new(Arc::new(mocks::SuccessStorage));
+
+    let status = service
+        .trim_tombstoned_person(Request::new(TrimTombstonedPersonRequest {
+            team_id: 1,
+            person_uuid: "not-a-valid-uuid".to_string(),
+            max_rows: 10,
+        }))
+        .await
+        .unwrap_err();
+
+    assert_eq!(status.code(), tonic::Code::InvalidArgument);
+    assert!(status.message().contains("Invalid UUID"));
 }
 
 // ============================================================

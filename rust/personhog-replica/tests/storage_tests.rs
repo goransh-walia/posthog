@@ -2,6 +2,7 @@ mod common;
 
 use common::TestContext;
 use personhog_replica::storage::postgres::ConsistencyLevel;
+use personhog_replica::storage::TrimOutcome;
 use personhog_replica::storage::{GroupKey, TombstonedDeleteOutcome};
 use rand::Rng;
 use rstest::rstest;
@@ -2867,7 +2868,9 @@ enum SeededState {
     Tombstoned,
     TombstonedWithoutDistinctIds,
     TombstonedWithLiveDistinctId,
-    TombstonedOversized,
+    TombstonedOversizedDistinctIds,
+    TombstonedOversizedOverrides,
+    TombstonedOversizedCohorts,
     Live,
 }
 
@@ -2887,7 +2890,21 @@ enum SeededState {
     true,
     false
 )]
-#[case::tombstoned_oversized(SeededState::TombstonedOversized, 0, 0, false, true)]
+#[case::tombstoned_oversized_distinct_ids(
+    SeededState::TombstonedOversizedDistinctIds,
+    0,
+    0,
+    false,
+    true
+)]
+#[case::tombstoned_oversized_overrides(
+    SeededState::TombstonedOversizedOverrides,
+    0,
+    0,
+    false,
+    true
+)]
+#[case::tombstoned_oversized_cohorts(SeededState::TombstonedOversizedCohorts, 0, 0, false, true)]
 #[case::live(SeededState::Live, 0, 1, false, false)]
 #[tokio::test]
 async fn test_delete_tombstoned_persons_single_person(
@@ -2916,9 +2933,27 @@ async fn test_delete_tombstoned_persons_single_person(
             .tombstone_person(person.id, Some("tomb_single_2"))
             .await
             .unwrap(),
-        SeededState::TombstonedOversized => {
+        // The test storage caps every dependent table at 3 rows; a fourth row puts the person
+        // over in that table alone.
+        SeededState::TombstonedOversizedDistinctIds => {
             for suffix in ["3", "4"] {
                 ctx.add_distinct_id_to_person(person.id, &format!("tomb_single_{suffix}"))
+                    .await
+                    .unwrap();
+            }
+            ctx.tombstone_person(person.id, None).await.unwrap();
+        }
+        SeededState::TombstonedOversizedOverrides => {
+            for flag in ["flag-2", "flag-3", "flag-4"] {
+                ctx.insert_hash_key_override(person.id, flag, "hash-under-test")
+                    .await
+                    .unwrap();
+            }
+            ctx.tombstone_person(person.id, None).await.unwrap();
+        }
+        SeededState::TombstonedOversizedCohorts => {
+            for cohort_id in [4243, 4244, 4245] {
+                ctx.add_person_to_cohort(person.id, cohort_id)
                     .await
                     .unwrap();
             }
@@ -2955,15 +2990,239 @@ async fn test_delete_tombstoned_persons_single_person(
         ctx.distinct_id_row_count(person.id).await.unwrap(),
         expected_distinct_ids
     );
-    let expected_dependents = if rows_kept { 1 } else { 0 };
+    let memberships_before = ctx.cohort_membership_count(person.id).await.unwrap();
+    let overrides_before = ctx.hash_key_override_count(person.id).await.unwrap();
     assert_eq!(
         ctx.cohort_membership_count(person.id).await.unwrap(),
-        expected_dependents
+        if rows_kept { memberships_before } else { 0 }
     );
     assert_eq!(
         ctx.hash_key_override_count(person.id).await.unwrap(),
-        expected_dependents
+        if rows_kept { overrides_before } else { 0 }
     );
+
+    ctx.cleanup().await.ok();
+}
+
+#[tokio::test]
+async fn test_delete_tombstoned_persons_groups_transactions_by_row_budget() {
+    // The test storage allows 9 dependent rows per transaction. Five persons with 3 distinct ids
+    // each must split into transactions, and every one of them still has to go.
+    let ctx = TestContext::new().await;
+    let mut persons = Vec::new();
+    for i in 0..5 {
+        let person = ctx
+            .insert_person(&format!("tomb_budget_{i}"), None)
+            .await
+            .unwrap();
+        for j in 0..2 {
+            ctx.add_distinct_id_to_person(person.id, &format!("tomb_budget_{i}_{j}"))
+                .await
+                .unwrap();
+        }
+        ctx.tombstone_person(person.id, None).await.unwrap();
+        persons.push(person);
+    }
+    let uuids: Vec<Uuid> = persons.iter().map(|p| p.uuid).collect();
+
+    let outcome = ctx
+        .storage
+        .delete_tombstoned_persons(ctx.team_id, &uuids)
+        .await
+        .expect("Failed to delete tombstoned persons");
+
+    assert_eq!(outcome.deleted, 5);
+    assert!(outcome.oversized_uuids.is_empty());
+    for person in &persons {
+        assert!(!ctx.person_row_exists(person.id).await.unwrap());
+        assert_eq!(ctx.distinct_id_row_count(person.id).await.unwrap(), 0);
+    }
+
+    ctx.cleanup().await.ok();
+}
+
+// ============================================================
+// Trim tombstoned person tests
+// ============================================================
+
+#[tokio::test]
+async fn test_trim_tombstoned_person_deletes_dependents_in_bounded_steps() {
+    // Cap 3 per table, trim clamp 10. The person is over the cap in every table: 5 tombstoned
+    // distinct ids, 4 overrides, 4 cohort memberships.
+    let ctx = TestContext::new().await;
+    let person = ctx.insert_person("trim_steps", None).await.unwrap();
+    for i in 0..4 {
+        ctx.add_distinct_id_to_person(person.id, &format!("trim_steps_{i}"))
+            .await
+            .unwrap();
+    }
+    for i in 0..4 {
+        ctx.insert_hash_key_override(person.id, &format!("flag-{i}"), "hash-under-test")
+            .await
+            .unwrap();
+    }
+    for cohort_id in 7001..=7004 {
+        ctx.add_person_to_cohort(person.id, cohort_id)
+            .await
+            .unwrap();
+    }
+    ctx.tombstone_person(person.id, None).await.unwrap();
+
+    let refused = ctx
+        .storage
+        .delete_tombstoned_persons(ctx.team_id, &[person.uuid])
+        .await
+        .unwrap();
+    assert_eq!(refused.oversized_uuids, vec![person.uuid]);
+    assert_eq!(refused.deleted, 0);
+
+    let trim = |max_rows: i64| {
+        ctx.storage
+            .trim_tombstoned_person(ctx.team_id, person.uuid, max_rows)
+    };
+
+    // Step 1: the budget goes to distinct ids first.
+    let step = trim(4).await.unwrap();
+    assert_eq!(
+        step,
+        TrimOutcome {
+            person_tombstoned: true,
+            distinct_ids_deleted: 4,
+            hash_key_overrides_deleted: 0,
+            cohort_memberships_deleted: 0,
+            over_cap: true,
+        }
+    );
+    assert_eq!(ctx.distinct_id_row_count(person.id).await.unwrap(), 1);
+
+    // Step 2: the last distinct id, then overrides with what is left of the budget.
+    let step = trim(4).await.unwrap();
+    assert_eq!(
+        (step.distinct_ids_deleted, step.hash_key_overrides_deleted),
+        (1, 3)
+    );
+    assert_eq!((step.cohort_memberships_deleted, step.over_cap), (0, true));
+
+    // Step 3: the last override, then cohort memberships; every table is under the cap now.
+    let step = trim(4).await.unwrap();
+    assert_eq!(
+        (
+            step.hash_key_overrides_deleted,
+            step.cohort_memberships_deleted
+        ),
+        (1, 3)
+    );
+    assert!(!step.over_cap);
+    assert!(ctx.person_row_exists(person.id).await.unwrap());
+
+    // The batch delete finishes the person and its remaining row.
+    let finished = ctx
+        .storage
+        .delete_tombstoned_persons(ctx.team_id, &[person.uuid])
+        .await
+        .unwrap();
+    assert_eq!(finished.deleted, 1);
+    assert!(!ctx.person_row_exists(person.id).await.unwrap());
+    assert_eq!(ctx.distinct_id_row_count(person.id).await.unwrap(), 0);
+    assert_eq!(ctx.hash_key_override_count(person.id).await.unwrap(), 0);
+    assert_eq!(ctx.cohort_membership_count(person.id).await.unwrap(), 0);
+
+    ctx.cleanup().await.ok();
+}
+
+#[tokio::test]
+async fn test_trim_tombstoned_person_clamps_the_step_to_the_server_maximum() {
+    let ctx = TestContext::new().await;
+    let person = ctx.insert_person("trim_clamp", None).await.unwrap();
+    for i in 0..11 {
+        ctx.add_distinct_id_to_person(person.id, &format!("trim_clamp_{i}"))
+            .await
+            .unwrap();
+    }
+    ctx.tombstone_person(person.id, None).await.unwrap();
+
+    let step = ctx
+        .storage
+        .trim_tombstoned_person(ctx.team_id, person.uuid, 1_000_000)
+        .await
+        .unwrap();
+
+    assert_eq!(step.distinct_ids_deleted, 10);
+    assert_eq!(ctx.distinct_id_row_count(person.id).await.unwrap(), 2);
+
+    ctx.cleanup().await.ok();
+}
+
+#[tokio::test]
+async fn test_trim_tombstoned_person_leaves_live_distinct_ids_and_reports_over_cap() {
+    // A tombstoned person whose distinct ids are all still live: nothing may go, and over_cap
+    // with nothing deleted is how the caller learns the person is blocked rather than oversized.
+    let ctx = TestContext::new().await;
+    let person = ctx.insert_person("trim_live", None).await.unwrap();
+    for i in 0..3 {
+        ctx.add_distinct_id_to_person(person.id, &format!("trim_live_{i}"))
+            .await
+            .unwrap();
+    }
+    sqlx::query("UPDATE posthog_person SET is_deleted = true WHERE team_id = $1 AND id = $2")
+        .bind(ctx.team_id)
+        .bind(person.id)
+        .execute(&ctx.pool)
+        .await
+        .unwrap();
+
+    let step = ctx
+        .storage
+        .trim_tombstoned_person(ctx.team_id, person.uuid, 10)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        step,
+        TrimOutcome {
+            person_tombstoned: true,
+            over_cap: true,
+            ..TrimOutcome::default()
+        }
+    );
+    assert_eq!(ctx.distinct_id_row_count(person.id).await.unwrap(), 4);
+
+    ctx.cleanup().await.ok();
+}
+
+#[rstest]
+#[case::live_person(false, 0)]
+#[case::other_team(true, 1)]
+#[tokio::test]
+async fn test_trim_tombstoned_person_touches_nothing_outside_a_tombstoned_person_of_the_team(
+    #[case] tombstoned: bool,
+    #[case] team_offset: i64,
+) {
+    let ctx = TestContext::new().await;
+    let person = ctx.insert_person("trim_untouched", None).await.unwrap();
+    for i in 0..4 {
+        ctx.add_distinct_id_to_person(person.id, &format!("trim_untouched_{i}"))
+            .await
+            .unwrap();
+    }
+    if tombstoned {
+        ctx.tombstone_person(person.id, None).await.unwrap();
+    }
+
+    let step = ctx
+        .storage
+        .trim_tombstoned_person(ctx.team_id + team_offset, person.uuid, 10)
+        .await
+        .unwrap();
+    let unknown = ctx
+        .storage
+        .trim_tombstoned_person(ctx.team_id, Uuid::now_v7(), 10)
+        .await
+        .unwrap();
+
+    assert_eq!(step, TrimOutcome::default());
+    assert_eq!(unknown, TrimOutcome::default());
+    assert_eq!(ctx.distinct_id_row_count(person.id).await.unwrap(), 5);
 
     ctx.cleanup().await.ok();
 }

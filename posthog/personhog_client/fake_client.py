@@ -70,8 +70,10 @@ class FakePersonHogClient:
         self._distinct_ids: dict[tuple[int, int], list[person_pb2.DistinctIdWithVersion]] = {}
         # keyed by (team_id, distinct_id): mappings tombstoned alongside their person
         self._tombstoned_distinct_ids: set[tuple[int, str]] = set()
-        # Mirrors the replica's TOMBSTONED_DELETE_MAX_DISTINCT_IDS.
-        self.max_distinct_ids_per_tombstoned_person = 1000
+        # Mirror the replica's TOMBSTONED_DELETE_MAX_DEPENDENT_ROWS and TOMBSTONED_TRIM_MAX_ROWS.
+        # The fake tracks distinct ids only, so the cap and the trim apply to them alone.
+        self.max_dependent_rows_per_tombstoned_person = 1000
+        self.trim_max_rows = 10000
 
         # keyed by project_id -> list of GroupTypeMapping
         self._group_type_mappings_by_project: dict[int, list[group_pb2.GroupTypeMapping]] = {}
@@ -617,7 +619,7 @@ class FakePersonHogClient:
                 response.skipped_live_count += 1
                 continue
             dids = self._distinct_ids.get((request.team_id, person.id), [])
-            if len(dids) > self.max_distinct_ids_per_tombstoned_person:
+            if len(dids) > self.max_dependent_rows_per_tombstoned_person:
                 response.oversized_person_uuids.append(uuid)
                 continue
             if any((request.team_id, did.distinct_id) not in self._tombstoned_distinct_ids for did in dids):
@@ -626,6 +628,26 @@ class FakePersonHogClient:
             self._remove_person(request.team_id, person)
             response.deleted_count += 1
         self.calls.append(_Call("delete_tombstoned_persons", request, response))
+        return response
+
+    def trim_tombstoned_person(
+        self, request: person_pb2.TrimTombstonedPersonRequest, timeout: float | None = None
+    ) -> person_pb2.TrimTombstonedPersonResponse:
+        response = person_pb2.TrimTombstonedPersonResponse()
+        person = self._persons_by_uuid.get((request.team_id, request.person_uuid))
+        if person is not None and person.is_deleted:
+            response.person_tombstoned = True
+            max_rows = min(request.max_rows if request.max_rows > 0 else 5000, self.trim_max_rows)
+            key = (request.team_id, person.id)
+            dids = self._distinct_ids.get(key, [])
+            tombstoned = [d for d in dids if (request.team_id, d.distinct_id) in self._tombstoned_distinct_ids]
+            for did in tombstoned[:max_rows]:
+                dids.remove(did)
+                self._persons_by_distinct_id.pop((request.team_id, did.distinct_id), None)
+                self._tombstoned_distinct_ids.discard((request.team_id, did.distinct_id))
+            response.distinct_ids_deleted = min(len(tombstoned), max_rows)
+            response.over_cap = len(dids) > self.max_dependent_rows_per_tombstoned_person
+        self.calls.append(_Call("trim_tombstoned_person", request, response))
         return response
 
     def delete_persons_batch_for_team(

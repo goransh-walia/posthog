@@ -13,7 +13,7 @@ import { file_personhog_types_v1_common } from './common_pb'
 export const file_personhog_types_v1_person: GenFile =
     /*@__PURE__*/
     fileDesc(
-        'Ch9wZXJzb25ob2cvdHlwZXMvdjEvcGVyc29uLnByb3RvEhJwZXJzb25ob2cudHlwZXMudjEisgIKBlBlcnNvbhIKCgJpZBgBIAEoAxIMCgR1dWlkGAIgASgJEg8KB3RlYW1faWQYAyABKAMSEgoKcHJvcGVydGllcxgEIAEoDBIiChpwcm9wZXJ0aWVzX2xhc3RfdXBkYXRlZF9hdBgFIAEoDBIhChlwcm9wZXJ0aWVzX2xhc3Rfb3BlcmF0aW9uGAYgASgMEhIKCmNyZWF0ZWRfYXQYByABKAMSDwoHdmVyc2lvbhgIIAEoAxIVCg1pc19pZGVudGlmaWVkGAkgASgIEhcKCmlzX3VzZXJfaWQYCiABKAhIAIgBARIZCgxsYXN0X3NlZW5fYXQYCyABKANIAYgBARISCgppc19kZWxldGVkGAwgASgIQg0KC19pc191c2VyX2lkQg8KDV9sYXN0X3NlZW5fYXQiTgoVRGlzdGluY3RJZFdpdGhWZXJzaW9uEhMKC2Rpc3RpbmN0X2lkGAEgASgJEhQKB3ZlcnNpb24YAiABKANIAIgBAUIKCghfdmVyc2lvbiJoChVQZXJzb25XaXRoRGlzdGluY3RJZHMSEwoLZGlzdGluY3RfaWQYASABKAkSLwoGcGVyc29uGAIgASgLMhoucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbkgAiAEBQgkKB19wZXJzb24iZwoRUGVyc29uRGlzdGluY3RJZHMSEQoJcGVyc29uX2lkGAEgASgDEj8KDGRpc3RpbmN0X2lkcxgCIAMoCzIpLnBlcnNvbmhvZy50eXBlcy52MS5EaXN0aW5jdElkV2l0aFZlcnNpb24ihwEKGFBlcnNvbldpdGhUZWFtRGlzdGluY3RJZBIvCgNrZXkYASABKAsyIi5wZXJzb25ob2cudHlwZXMudjEuVGVhbURpc3RpbmN0SWQSLwoGcGVyc29uGAIgASgLMhoucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbkgAiAEBQgkKB19wZXJzb24ibQoQR2V0UGVyc29uUmVxdWVzdBIPCgd0ZWFtX2lkGAEgASgDEhEKCXBlcnNvbl9pZBgCIAEoAxI1CgxyZWFkX29wdGlvbnMYAyABKAsyHy5wZXJzb25ob2cudHlwZXMudjEuUmVhZE9wdGlvbnMiTwoRR2V0UGVyc29uUmVzcG9uc2USLwoGcGVyc29uGAEgASgLMhoucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbkgAiAEBQgkKB19wZXJzb24ibwoRR2V0UGVyc29uc1JlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxISCgpwZXJzb25faWRzGAIgAygDEjUKDHJlYWRfb3B0aW9ucxgDIAEoCzIfLnBlcnNvbmhvZy50eXBlcy52MS5SZWFkT3B0aW9ucyJTCg9QZXJzb25zUmVzcG9uc2USKwoHcGVyc29ucxgBIAMoCzIaLnBlcnNvbmhvZy50eXBlcy52MS5QZXJzb24SEwoLbWlzc2luZ19pZHMYAiADKAMibgoWR2V0UGVyc29uQnlVdWlkUmVxdWVzdBIPCgd0ZWFtX2lkGAEgASgDEgwKBHV1aWQYAiABKAkSNQoMcmVhZF9vcHRpb25zGAMgASgLMh8ucGVyc29uaG9nLnR5cGVzLnYxLlJlYWRPcHRpb25zInEKGEdldFBlcnNvbnNCeVV1aWRzUmVxdWVzdBIPCgd0ZWFtX2lkGAEgASgDEg0KBXV1aWRzGAIgAygJEjUKDHJlYWRfb3B0aW9ucxgDIAEoCzIfLnBlcnNvbmhvZy50eXBlcy52MS5SZWFkT3B0aW9ucyJ7ChxHZXRQZXJzb25CeURpc3RpbmN0SWRSZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEwoLZGlzdGluY3RfaWQYAiABKAkSNQoMcmVhZF9vcHRpb25zGAMgASgLMh8ucGVyc29uaG9nLnR5cGVzLnYxLlJlYWRPcHRpb25zIoQBCiRHZXRQZXJzb25zQnlEaXN0aW5jdElkc0luVGVhbVJlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxIUCgxkaXN0aW5jdF9pZHMYAiADKAkSNQoMcmVhZF9vcHRpb25zGAMgASgLMh8ucGVyc29uaG9nLnR5cGVzLnYxLlJlYWRPcHRpb25zImAKIlBlcnNvbnNCeURpc3RpbmN0SWRzSW5UZWFtUmVzcG9uc2USOgoHcmVzdWx0cxgBIAMoCzIpLnBlcnNvbmhvZy50eXBlcy52MS5QZXJzb25XaXRoRGlzdGluY3RJZHMilgEKHkdldFBlcnNvbnNCeURpc3RpbmN0SWRzUmVxdWVzdBI9ChF0ZWFtX2Rpc3RpbmN0X2lkcxgBIAMoCzIiLnBlcnNvbmhvZy50eXBlcy52MS5UZWFtRGlzdGluY3RJZBI1CgxyZWFkX29wdGlvbnMYAiABKAsyHy5wZXJzb25ob2cudHlwZXMudjEuUmVhZE9wdGlvbnMiXQocUGVyc29uc0J5RGlzdGluY3RJZHNSZXNwb25zZRI9CgdyZXN1bHRzGAEgAygLMiwucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbldpdGhUZWFtRGlzdGluY3RJZCKZAQoeR2V0RGlzdGluY3RJZHNGb3JQZXJzb25SZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEQoJcGVyc29uX2lkGAIgASgDEjUKDHJlYWRfb3B0aW9ucxgDIAEoCzIfLnBlcnNvbmhvZy50eXBlcy52MS5SZWFkT3B0aW9ucxISCgVsaW1pdBgEIAEoA0gAiAEBQggKBl9saW1pdCJiCh9HZXREaXN0aW5jdElkc0ZvclBlcnNvblJlc3BvbnNlEj8KDGRpc3RpbmN0X2lkcxgBIAMoCzIpLnBlcnNvbmhvZy50eXBlcy52MS5EaXN0aW5jdElkV2l0aFZlcnNpb24isQEKH0dldERpc3RpbmN0SWRzRm9yUGVyc29uc1JlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxISCgpwZXJzb25faWRzGAIgAygDEjUKDHJlYWRfb3B0aW9ucxgDIAEoCzIfLnBlcnNvbmhvZy50eXBlcy52MS5SZWFkT3B0aW9ucxIdChBsaW1pdF9wZXJfcGVyc29uGAQgASgDSACIAQFCEwoRX2xpbWl0X3Blcl9wZXJzb24iZgogR2V0RGlzdGluY3RJZHNGb3JQZXJzb25zUmVzcG9uc2USQgoTcGVyc29uX2Rpc3RpbmN0X2lkcxgBIAMoCzIlLnBlcnNvbmhvZy50eXBlcy52MS5QZXJzb25EaXN0aW5jdElkcyKWAgodVXBkYXRlUGVyc29uUHJvcGVydGllc1JlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxIRCglwZXJzb25faWQYAiABKAMSEgoKZXZlbnRfbmFtZRgDIAEoCRIWCg5zZXRfcHJvcGVydGllcxgEIAEoDBIbChNzZXRfb25jZV9wcm9wZXJ0aWVzGAUgASgMEhgKEHVuc2V0X3Byb3BlcnRpZXMYBiADKAkSGgoNaXNfaWRlbnRpZmllZBgHIAEoCEgAiAEBEhkKDGxhc3Rfc2Vlbl9hdBgIIAEoA0gBiAEBEhQKDGZvcmNlX3VwZGF0ZRgJIAEoCEIQCg5faXNfaWRlbnRpZmllZEIPCg1fbGFzdF9zZWVuX2F0Im0KHlVwZGF0ZVBlcnNvblByb3BlcnRpZXNSZXNwb25zZRIvCgZwZXJzb24YASABKAsyGi5wZXJzb25ob2cudHlwZXMudjEuUGVyc29uSACIAQESDwoHdXBkYXRlZBgCIAEoCEIJCgdfcGVyc29uIj0KFERlbGV0ZVBlcnNvbnNSZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSFAoMcGVyc29uX3V1aWRzGAIgAygJIi4KFURlbGV0ZVBlcnNvbnNSZXNwb25zZRIVCg1kZWxldGVkX2NvdW50GAEgASgDIkcKIERlbGV0ZVBlcnNvbnNCYXRjaEZvclRlYW1SZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEgoKYmF0Y2hfc2l6ZRgCIAEoAyI6CiFEZWxldGVQZXJzb25zQmF0Y2hGb3JUZWFtUmVzcG9uc2USFQoNZGVsZXRlZF9jb3VudBgBIAEoAyJHCh5EZWxldGVUb21ic3RvbmVkUGVyc29uc1JlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxIUCgxwZXJzb25fdXVpZHMYAiADKAkikgEKH0RlbGV0ZVRvbWJzdG9uZWRQZXJzb25zUmVzcG9uc2USFQoNZGVsZXRlZF9jb3VudBgBIAEoAxIaChJza2lwcGVkX2xpdmVfY291bnQYAiABKAMSHAoUYmxvY2tlZF9wZXJzb25fdXVpZHMYAyADKAkSHgoWb3ZlcnNpemVkX3BlcnNvbl91dWlkcxgEIAMoCSJXChJTcGxpdFBlcnNvblJlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxIRCglwZXJzb25faWQYAiABKAMSHQoVZGlzdGluY3RfaWRzX3RvX3NwbGl0GAMgAygJIo4BCgtTcGxpdFJlc3VsdBITCgtkaXN0aW5jdF9pZBgBIAEoCRIXCg9uZXdfcGVyc29uX3V1aWQYAiABKAkSGgoSbmV3X3BlcnNvbl92ZXJzaW9uGAMgASgDEhMKC3BkaV92ZXJzaW9uGAQgASgDEiAKGG5ld19wZXJzb25fY3JlYXRlZF9hdF9tcxgFIAEoAyJGChNTcGxpdFBlcnNvblJlc3BvbnNlEi8KBnNwbGl0cxgBIAMoCzIfLnBlcnNvbmhvZy50eXBlcy52MS5TcGxpdFJlc3VsdCJjCiZTZXRQZXJzb25EaXN0aW5jdElkVmVyc2lvbkZsb29yUmVxdWVzdBIPCgd0ZWFtX2lkGAEgASgDEhMKC2Rpc3RpbmN0X2lkGAIgASgJEhMKC21pbl92ZXJzaW9uGAMgASgDImUKJ1NldFBlcnNvbkRpc3RpbmN0SWRWZXJzaW9uRmxvb3JSZXNwb25zZRIvCgZwZXJzb24YASABKAsyGi5wZXJzb25ob2cudHlwZXMudjEuUGVyc29uSACIAQFCCQoHX3BlcnNvbiJXChxTZXRQZXJzb25WZXJzaW9uRmxvb3JSZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEQoJcGVyc29uX2lkGAIgASgDEhMKC21pbl92ZXJzaW9uGAMgASgDIjAKHVNldFBlcnNvblZlcnNpb25GbG9vclJlc3BvbnNlEg8KB3VwZGF0ZWQYASABKAgifQoSRmVuY2VQZXJzb25SZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEQoJcGVyc29uX2lkGAIgASgDEg0KBW9wX2lkGAMgASgJEjQKB29wX3R5cGUYBCABKA4yIy5wZXJzb25ob2cudHlwZXMudjEuTGlmZWN5Y2xlT3BUeXBlIkEKE0ZlbmNlUGVyc29uUmVzcG9uc2USKgoGc2VhbGVkGAEgASgLMhoucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbiLWAQoTUmVsZWFzZUZlbmNlUmVxdWVzdBIPCgd0ZWFtX2lkGAEgASgDEhEKCXBlcnNvbl9pZBgCIAEoAxITCgtwZXJzb25fdXVpZBgDIAEoCRINCgVvcF9pZBgEIAEoCRIzCgdvdXRjb21lGAUgASgOMiIucGVyc29uaG9nLnR5cGVzLnYxLlJlbGVhc2VPdXRjb21lEhsKDnNlYWxlZF92ZXJzaW9uGAYgASgDSACIAQESEgoKY3JlYXRlZF9hdBgHIAEoA0IRCg9fc2VhbGVkX3ZlcnNpb24iFgoUUmVsZWFzZUZlbmNlUmVzcG9uc2UiUwoUU2VhbGVkU291cmNlU25hcHNob3QSKgoGcGVyc29uGAEgASgLMhoucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbhIPCgdvcmRpbmFsGAIgASgFIr0BChlGb2xkUGVyc29uRG9jdW1lbnRSZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEQoJcGVyc29uX2lkGAIgASgDEkIKEHNlYWxlZF9zbmFwc2hvdHMYAyADKAsyKC5wZXJzb25ob2cudHlwZXMudjEuU2VhbGVkU291cmNlU25hcHNob3QSEQoJZXZlbnRfc2V0GAQgASgMEhYKDmV2ZW50X3NldF9vbmNlGAUgASgMEg0KBW9wX2lkGAYgASgJIkgKGkZvbGRQZXJzb25Eb2N1bWVudFJlc3BvbnNlEioKBnBlcnNvbhgBIAEoCzIaLnBlcnNvbmhvZy50eXBlcy52MS5QZXJzb24qbwoPTGlmZWN5Y2xlT3BUeXBlEiEKHUxJRkVDWUNMRV9PUF9UWVBFX1VOU1BFQ0lGSUVEEAASHAoYTElGRUNZQ0xFX09QX1RZUEVfREVMRVRFEAESGwoXTElGRUNZQ0xFX09QX1RZUEVfTUVSR0UQAiptCg5SZWxlYXNlT3V0Y29tZRIfChtSRUxFQVNFX09VVENPTUVfVU5TUEVDSUZJRUQQABIdChlSRUxFQVNFX09VVENPTUVfQ09NTUlUVEVEEAESGwoXUkVMRUFTRV9PVVRDT01FX0FCT1JURUQQAmIGcHJvdG8z',
+        'Ch9wZXJzb25ob2cvdHlwZXMvdjEvcGVyc29uLnByb3RvEhJwZXJzb25ob2cudHlwZXMudjEisgIKBlBlcnNvbhIKCgJpZBgBIAEoAxIMCgR1dWlkGAIgASgJEg8KB3RlYW1faWQYAyABKAMSEgoKcHJvcGVydGllcxgEIAEoDBIiChpwcm9wZXJ0aWVzX2xhc3RfdXBkYXRlZF9hdBgFIAEoDBIhChlwcm9wZXJ0aWVzX2xhc3Rfb3BlcmF0aW9uGAYgASgMEhIKCmNyZWF0ZWRfYXQYByABKAMSDwoHdmVyc2lvbhgIIAEoAxIVCg1pc19pZGVudGlmaWVkGAkgASgIEhcKCmlzX3VzZXJfaWQYCiABKAhIAIgBARIZCgxsYXN0X3NlZW5fYXQYCyABKANIAYgBARISCgppc19kZWxldGVkGAwgASgIQg0KC19pc191c2VyX2lkQg8KDV9sYXN0X3NlZW5fYXQiTgoVRGlzdGluY3RJZFdpdGhWZXJzaW9uEhMKC2Rpc3RpbmN0X2lkGAEgASgJEhQKB3ZlcnNpb24YAiABKANIAIgBAUIKCghfdmVyc2lvbiJoChVQZXJzb25XaXRoRGlzdGluY3RJZHMSEwoLZGlzdGluY3RfaWQYASABKAkSLwoGcGVyc29uGAIgASgLMhoucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbkgAiAEBQgkKB19wZXJzb24iZwoRUGVyc29uRGlzdGluY3RJZHMSEQoJcGVyc29uX2lkGAEgASgDEj8KDGRpc3RpbmN0X2lkcxgCIAMoCzIpLnBlcnNvbmhvZy50eXBlcy52MS5EaXN0aW5jdElkV2l0aFZlcnNpb24ihwEKGFBlcnNvbldpdGhUZWFtRGlzdGluY3RJZBIvCgNrZXkYASABKAsyIi5wZXJzb25ob2cudHlwZXMudjEuVGVhbURpc3RpbmN0SWQSLwoGcGVyc29uGAIgASgLMhoucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbkgAiAEBQgkKB19wZXJzb24ibQoQR2V0UGVyc29uUmVxdWVzdBIPCgd0ZWFtX2lkGAEgASgDEhEKCXBlcnNvbl9pZBgCIAEoAxI1CgxyZWFkX29wdGlvbnMYAyABKAsyHy5wZXJzb25ob2cudHlwZXMudjEuUmVhZE9wdGlvbnMiTwoRR2V0UGVyc29uUmVzcG9uc2USLwoGcGVyc29uGAEgASgLMhoucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbkgAiAEBQgkKB19wZXJzb24ibwoRR2V0UGVyc29uc1JlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxISCgpwZXJzb25faWRzGAIgAygDEjUKDHJlYWRfb3B0aW9ucxgDIAEoCzIfLnBlcnNvbmhvZy50eXBlcy52MS5SZWFkT3B0aW9ucyJTCg9QZXJzb25zUmVzcG9uc2USKwoHcGVyc29ucxgBIAMoCzIaLnBlcnNvbmhvZy50eXBlcy52MS5QZXJzb24SEwoLbWlzc2luZ19pZHMYAiADKAMibgoWR2V0UGVyc29uQnlVdWlkUmVxdWVzdBIPCgd0ZWFtX2lkGAEgASgDEgwKBHV1aWQYAiABKAkSNQoMcmVhZF9vcHRpb25zGAMgASgLMh8ucGVyc29uaG9nLnR5cGVzLnYxLlJlYWRPcHRpb25zInEKGEdldFBlcnNvbnNCeVV1aWRzUmVxdWVzdBIPCgd0ZWFtX2lkGAEgASgDEg0KBXV1aWRzGAIgAygJEjUKDHJlYWRfb3B0aW9ucxgDIAEoCzIfLnBlcnNvbmhvZy50eXBlcy52MS5SZWFkT3B0aW9ucyJ7ChxHZXRQZXJzb25CeURpc3RpbmN0SWRSZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEwoLZGlzdGluY3RfaWQYAiABKAkSNQoMcmVhZF9vcHRpb25zGAMgASgLMh8ucGVyc29uaG9nLnR5cGVzLnYxLlJlYWRPcHRpb25zIoQBCiRHZXRQZXJzb25zQnlEaXN0aW5jdElkc0luVGVhbVJlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxIUCgxkaXN0aW5jdF9pZHMYAiADKAkSNQoMcmVhZF9vcHRpb25zGAMgASgLMh8ucGVyc29uaG9nLnR5cGVzLnYxLlJlYWRPcHRpb25zImAKIlBlcnNvbnNCeURpc3RpbmN0SWRzSW5UZWFtUmVzcG9uc2USOgoHcmVzdWx0cxgBIAMoCzIpLnBlcnNvbmhvZy50eXBlcy52MS5QZXJzb25XaXRoRGlzdGluY3RJZHMilgEKHkdldFBlcnNvbnNCeURpc3RpbmN0SWRzUmVxdWVzdBI9ChF0ZWFtX2Rpc3RpbmN0X2lkcxgBIAMoCzIiLnBlcnNvbmhvZy50eXBlcy52MS5UZWFtRGlzdGluY3RJZBI1CgxyZWFkX29wdGlvbnMYAiABKAsyHy5wZXJzb25ob2cudHlwZXMudjEuUmVhZE9wdGlvbnMiXQocUGVyc29uc0J5RGlzdGluY3RJZHNSZXNwb25zZRI9CgdyZXN1bHRzGAEgAygLMiwucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbldpdGhUZWFtRGlzdGluY3RJZCKZAQoeR2V0RGlzdGluY3RJZHNGb3JQZXJzb25SZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEQoJcGVyc29uX2lkGAIgASgDEjUKDHJlYWRfb3B0aW9ucxgDIAEoCzIfLnBlcnNvbmhvZy50eXBlcy52MS5SZWFkT3B0aW9ucxISCgVsaW1pdBgEIAEoA0gAiAEBQggKBl9saW1pdCJiCh9HZXREaXN0aW5jdElkc0ZvclBlcnNvblJlc3BvbnNlEj8KDGRpc3RpbmN0X2lkcxgBIAMoCzIpLnBlcnNvbmhvZy50eXBlcy52MS5EaXN0aW5jdElkV2l0aFZlcnNpb24isQEKH0dldERpc3RpbmN0SWRzRm9yUGVyc29uc1JlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxISCgpwZXJzb25faWRzGAIgAygDEjUKDHJlYWRfb3B0aW9ucxgDIAEoCzIfLnBlcnNvbmhvZy50eXBlcy52MS5SZWFkT3B0aW9ucxIdChBsaW1pdF9wZXJfcGVyc29uGAQgASgDSACIAQFCEwoRX2xpbWl0X3Blcl9wZXJzb24iZgogR2V0RGlzdGluY3RJZHNGb3JQZXJzb25zUmVzcG9uc2USQgoTcGVyc29uX2Rpc3RpbmN0X2lkcxgBIAMoCzIlLnBlcnNvbmhvZy50eXBlcy52MS5QZXJzb25EaXN0aW5jdElkcyKWAgodVXBkYXRlUGVyc29uUHJvcGVydGllc1JlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxIRCglwZXJzb25faWQYAiABKAMSEgoKZXZlbnRfbmFtZRgDIAEoCRIWCg5zZXRfcHJvcGVydGllcxgEIAEoDBIbChNzZXRfb25jZV9wcm9wZXJ0aWVzGAUgASgMEhgKEHVuc2V0X3Byb3BlcnRpZXMYBiADKAkSGgoNaXNfaWRlbnRpZmllZBgHIAEoCEgAiAEBEhkKDGxhc3Rfc2Vlbl9hdBgIIAEoA0gBiAEBEhQKDGZvcmNlX3VwZGF0ZRgJIAEoCEIQCg5faXNfaWRlbnRpZmllZEIPCg1fbGFzdF9zZWVuX2F0Im0KHlVwZGF0ZVBlcnNvblByb3BlcnRpZXNSZXNwb25zZRIvCgZwZXJzb24YASABKAsyGi5wZXJzb25ob2cudHlwZXMudjEuUGVyc29uSACIAQESDwoHdXBkYXRlZBgCIAEoCEIJCgdfcGVyc29uIj0KFERlbGV0ZVBlcnNvbnNSZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSFAoMcGVyc29uX3V1aWRzGAIgAygJIi4KFURlbGV0ZVBlcnNvbnNSZXNwb25zZRIVCg1kZWxldGVkX2NvdW50GAEgASgDIkcKIERlbGV0ZVBlcnNvbnNCYXRjaEZvclRlYW1SZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEgoKYmF0Y2hfc2l6ZRgCIAEoAyI6CiFEZWxldGVQZXJzb25zQmF0Y2hGb3JUZWFtUmVzcG9uc2USFQoNZGVsZXRlZF9jb3VudBgBIAEoAyJHCh5EZWxldGVUb21ic3RvbmVkUGVyc29uc1JlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxIUCgxwZXJzb25fdXVpZHMYAiADKAkikgEKH0RlbGV0ZVRvbWJzdG9uZWRQZXJzb25zUmVzcG9uc2USFQoNZGVsZXRlZF9jb3VudBgBIAEoAxIaChJza2lwcGVkX2xpdmVfY291bnQYAiABKAMSHAoUYmxvY2tlZF9wZXJzb25fdXVpZHMYAyADKAkSHgoWb3ZlcnNpemVkX3BlcnNvbl91dWlkcxgEIAMoCSJVChtUcmltVG9tYnN0b25lZFBlcnNvblJlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxITCgtwZXJzb25fdXVpZBgCIAEoCRIQCghtYXhfcm93cxgDIAEoAyKxAQocVHJpbVRvbWJzdG9uZWRQZXJzb25SZXNwb25zZRIZChFwZXJzb25fdG9tYnN0b25lZBgBIAEoCBIcChRkaXN0aW5jdF9pZHNfZGVsZXRlZBgCIAEoAxIiChpoYXNoX2tleV9vdmVycmlkZXNfZGVsZXRlZBgDIAEoAxIiChpjb2hvcnRfbWVtYmVyc2hpcHNfZGVsZXRlZBgEIAEoAxIQCghvdmVyX2NhcBgFIAEoCCJXChJTcGxpdFBlcnNvblJlcXVlc3QSDwoHdGVhbV9pZBgBIAEoAxIRCglwZXJzb25faWQYAiABKAMSHQoVZGlzdGluY3RfaWRzX3RvX3NwbGl0GAMgAygJIo4BCgtTcGxpdFJlc3VsdBITCgtkaXN0aW5jdF9pZBgBIAEoCRIXCg9uZXdfcGVyc29uX3V1aWQYAiABKAkSGgoSbmV3X3BlcnNvbl92ZXJzaW9uGAMgASgDEhMKC3BkaV92ZXJzaW9uGAQgASgDEiAKGG5ld19wZXJzb25fY3JlYXRlZF9hdF9tcxgFIAEoAyJGChNTcGxpdFBlcnNvblJlc3BvbnNlEi8KBnNwbGl0cxgBIAMoCzIfLnBlcnNvbmhvZy50eXBlcy52MS5TcGxpdFJlc3VsdCJjCiZTZXRQZXJzb25EaXN0aW5jdElkVmVyc2lvbkZsb29yUmVxdWVzdBIPCgd0ZWFtX2lkGAEgASgDEhMKC2Rpc3RpbmN0X2lkGAIgASgJEhMKC21pbl92ZXJzaW9uGAMgASgDImUKJ1NldFBlcnNvbkRpc3RpbmN0SWRWZXJzaW9uRmxvb3JSZXNwb25zZRIvCgZwZXJzb24YASABKAsyGi5wZXJzb25ob2cudHlwZXMudjEuUGVyc29uSACIAQFCCQoHX3BlcnNvbiJXChxTZXRQZXJzb25WZXJzaW9uRmxvb3JSZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEQoJcGVyc29uX2lkGAIgASgDEhMKC21pbl92ZXJzaW9uGAMgASgDIjAKHVNldFBlcnNvblZlcnNpb25GbG9vclJlc3BvbnNlEg8KB3VwZGF0ZWQYASABKAgifQoSRmVuY2VQZXJzb25SZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEQoJcGVyc29uX2lkGAIgASgDEg0KBW9wX2lkGAMgASgJEjQKB29wX3R5cGUYBCABKA4yIy5wZXJzb25ob2cudHlwZXMudjEuTGlmZWN5Y2xlT3BUeXBlIkEKE0ZlbmNlUGVyc29uUmVzcG9uc2USKgoGc2VhbGVkGAEgASgLMhoucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbiLWAQoTUmVsZWFzZUZlbmNlUmVxdWVzdBIPCgd0ZWFtX2lkGAEgASgDEhEKCXBlcnNvbl9pZBgCIAEoAxITCgtwZXJzb25fdXVpZBgDIAEoCRINCgVvcF9pZBgEIAEoCRIzCgdvdXRjb21lGAUgASgOMiIucGVyc29uaG9nLnR5cGVzLnYxLlJlbGVhc2VPdXRjb21lEhsKDnNlYWxlZF92ZXJzaW9uGAYgASgDSACIAQESEgoKY3JlYXRlZF9hdBgHIAEoA0IRCg9fc2VhbGVkX3ZlcnNpb24iFgoUUmVsZWFzZUZlbmNlUmVzcG9uc2UiUwoUU2VhbGVkU291cmNlU25hcHNob3QSKgoGcGVyc29uGAEgASgLMhoucGVyc29uaG9nLnR5cGVzLnYxLlBlcnNvbhIPCgdvcmRpbmFsGAIgASgFIr0BChlGb2xkUGVyc29uRG9jdW1lbnRSZXF1ZXN0Eg8KB3RlYW1faWQYASABKAMSEQoJcGVyc29uX2lkGAIgASgDEkIKEHNlYWxlZF9zbmFwc2hvdHMYAyADKAsyKC5wZXJzb25ob2cudHlwZXMudjEuU2VhbGVkU291cmNlU25hcHNob3QSEQoJZXZlbnRfc2V0GAQgASgMEhYKDmV2ZW50X3NldF9vbmNlGAUgASgMEg0KBW9wX2lkGAYgASgJIkgKGkZvbGRQZXJzb25Eb2N1bWVudFJlc3BvbnNlEioKBnBlcnNvbhgBIAEoCzIaLnBlcnNvbmhvZy50eXBlcy52MS5QZXJzb24qbwoPTGlmZWN5Y2xlT3BUeXBlEiEKHUxJRkVDWUNMRV9PUF9UWVBFX1VOU1BFQ0lGSUVEEAASHAoYTElGRUNZQ0xFX09QX1RZUEVfREVMRVRFEAESGwoXTElGRUNZQ0xFX09QX1RZUEVfTUVSR0UQAiptCg5SZWxlYXNlT3V0Y29tZRIfChtSRUxFQVNFX09VVENPTUVfVU5TUEVDSUZJRUQQABIdChlSRUxFQVNFX09VVENPTUVfQ09NTUlUVEVEEAESGwoXUkVMRUFTRV9PVVRDT01FX0FCT1JURUQQAmIGcHJvdG8z',
         [file_personhog_types_v1_common]
     )
 
@@ -864,9 +864,10 @@ export type DeleteTombstonedPersonsResponse = Message<'personhog.types.v1.Delete
     blockedPersonUuids: string[]
 
     /**
-     * Persons still tombstoned but owning more distinct ids than one delete
-     * transaction may touch (replica setting TOMBSTONED_DELETE_MAX_DISTINCT_IDS).
-     * Nothing was deleted for them; the caller must not treat them as cleaned.
+     * Persons still tombstoned but owning more rows in a dependent table (distinct
+     * ids, hash key overrides or cohort memberships) than one delete transaction may
+     * touch (replica setting TOMBSTONED_DELETE_MAX_DEPENDENT_ROWS). Nothing was
+     * deleted for them; trim them with TrimTombstonedPerson, then send them again.
      *
      * @generated from field: repeated string oversized_person_uuids = 4;
      */
@@ -880,6 +881,87 @@ export type DeleteTombstonedPersonsResponse = Message<'personhog.types.v1.Delete
 export const DeleteTombstonedPersonsResponseSchema: GenMessage<DeleteTombstonedPersonsResponse> =
     /*@__PURE__*/
     messageDesc(file_personhog_types_v1_person, 27)
+
+/**
+ * TrimTombstonedPersonRequest deletes up to max_rows dependent rows of one
+ * tombstoned person in one short transaction under the person's row lock:
+ * tombstoned distinct ids first, then hash key overrides, then cohort
+ * memberships. Call it until over_cap is false, then DeleteTombstonedPersons
+ * finishes the person. A live or missing person is left untouched. Idempotent.
+ *
+ * @generated from message personhog.types.v1.TrimTombstonedPersonRequest
+ */
+export type TrimTombstonedPersonRequest = Message<'personhog.types.v1.TrimTombstonedPersonRequest'> & {
+    /**
+     * @generated from field: int64 team_id = 1;
+     */
+    teamId: bigint
+
+    /**
+     * @generated from field: string person_uuid = 2;
+     */
+    personUuid: string
+
+    /**
+     * Rows to delete in this call. 0 means the server default; the server clamps
+     * the value to its own maximum (replica setting TOMBSTONED_TRIM_MAX_ROWS).
+     *
+     * @generated from field: int64 max_rows = 3;
+     */
+    maxRows: bigint
+}
+
+/**
+ * Describes the message personhog.types.v1.TrimTombstonedPersonRequest.
+ * Use `create(TrimTombstonedPersonRequestSchema)` to create a new message.
+ */
+export const TrimTombstonedPersonRequestSchema: GenMessage<TrimTombstonedPersonRequest> =
+    /*@__PURE__*/
+    messageDesc(file_personhog_types_v1_person, 28)
+
+/**
+ * @generated from message personhog.types.v1.TrimTombstonedPersonResponse
+ */
+export type TrimTombstonedPersonResponse = Message<'personhog.types.v1.TrimTombstonedPersonResponse'> & {
+    /**
+     * False when the person is live or missing. Nothing was deleted then.
+     *
+     * @generated from field: bool person_tombstoned = 1;
+     */
+    personTombstoned: boolean
+
+    /**
+     * @generated from field: int64 distinct_ids_deleted = 2;
+     */
+    distinctIdsDeleted: bigint
+
+    /**
+     * @generated from field: int64 hash_key_overrides_deleted = 3;
+     */
+    hashKeyOverridesDeleted: bigint
+
+    /**
+     * @generated from field: int64 cohort_memberships_deleted = 4;
+     */
+    cohortMembershipsDeleted: bigint
+
+    /**
+     * A dependent table still holds more rows than the cap. When this is true
+     * and nothing was deleted, the remaining rows are live distinct ids: stop
+     * trimming, the person is blocked, not oversized.
+     *
+     * @generated from field: bool over_cap = 5;
+     */
+    overCap: boolean
+}
+
+/**
+ * Describes the message personhog.types.v1.TrimTombstonedPersonResponse.
+ * Use `create(TrimTombstonedPersonResponseSchema)` to create a new message.
+ */
+export const TrimTombstonedPersonResponseSchema: GenMessage<TrimTombstonedPersonResponse> =
+    /*@__PURE__*/
+    messageDesc(file_personhog_types_v1_person, 29)
 
 /**
  * SplitPersonRequest splits specific distinct_ids off of a person onto new persons.
@@ -917,7 +999,7 @@ export type SplitPersonRequest = Message<'personhog.types.v1.SplitPersonRequest'
  */
 export const SplitPersonRequestSchema: GenMessage<SplitPersonRequest> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 28)
+    messageDesc(file_personhog_types_v1_person, 30)
 
 /**
  * SplitResult describes a single distinct_id that was split onto a new person.
@@ -959,7 +1041,7 @@ export type SplitResult = Message<'personhog.types.v1.SplitResult'> & {
  * Describes the message personhog.types.v1.SplitResult.
  * Use `create(SplitResultSchema)` to create a new message.
  */
-export const SplitResultSchema: GenMessage<SplitResult> = /*@__PURE__*/ messageDesc(file_personhog_types_v1_person, 29)
+export const SplitResultSchema: GenMessage<SplitResult> = /*@__PURE__*/ messageDesc(file_personhog_types_v1_person, 31)
 
 /**
  * @generated from message personhog.types.v1.SplitPersonResponse
@@ -979,7 +1061,7 @@ export type SplitPersonResponse = Message<'personhog.types.v1.SplitPersonRespons
  */
 export const SplitPersonResponseSchema: GenMessage<SplitPersonResponse> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 30)
+    messageDesc(file_personhog_types_v1_person, 32)
 
 /**
  * SetPersonDistinctIdVersionFloorRequest bumps a person_distinct_id row's version.
@@ -1016,7 +1098,7 @@ export type SetPersonDistinctIdVersionFloorRequest =
  */
 export const SetPersonDistinctIdVersionFloorRequestSchema: GenMessage<SetPersonDistinctIdVersionFloorRequest> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 31)
+    messageDesc(file_personhog_types_v1_person, 33)
 
 /**
  * @generated from message personhog.types.v1.SetPersonDistinctIdVersionFloorResponse
@@ -1039,7 +1121,7 @@ export type SetPersonDistinctIdVersionFloorResponse =
  */
 export const SetPersonDistinctIdVersionFloorResponseSchema: GenMessage<SetPersonDistinctIdVersionFloorResponse> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 32)
+    messageDesc(file_personhog_types_v1_person, 34)
 
 /**
  * SetPersonVersionFloorRequest bumps a person's version. Used by the undelete repair
@@ -1074,7 +1156,7 @@ export type SetPersonVersionFloorRequest = Message<'personhog.types.v1.SetPerson
  */
 export const SetPersonVersionFloorRequestSchema: GenMessage<SetPersonVersionFloorRequest> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 33)
+    messageDesc(file_personhog_types_v1_person, 35)
 
 /**
  * @generated from message personhog.types.v1.SetPersonVersionFloorResponse
@@ -1094,7 +1176,7 @@ export type SetPersonVersionFloorResponse = Message<'personhog.types.v1.SetPerso
  */
 export const SetPersonVersionFloorResponseSchema: GenMessage<SetPersonVersionFloorResponse> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 34)
+    messageDesc(file_personhog_types_v1_person, 36)
 
 /**
  * FencePersonRequest freezes a person for a lifecycle operation (see
@@ -1131,7 +1213,7 @@ export type FencePersonRequest = Message<'personhog.types.v1.FencePersonRequest'
  */
 export const FencePersonRequestSchema: GenMessage<FencePersonRequest> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 35)
+    messageDesc(file_personhog_types_v1_person, 37)
 
 /**
  * @generated from message personhog.types.v1.FencePersonResponse
@@ -1160,7 +1242,7 @@ export type FencePersonResponse = Message<'personhog.types.v1.FencePersonRespons
  */
 export const FencePersonResponseSchema: GenMessage<FencePersonResponse> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 36)
+    messageDesc(file_personhog_types_v1_person, 38)
 
 /**
  * ReleaseFenceRequest closes a fence (see PersonHogLeader.ReleaseFence).
@@ -1228,7 +1310,7 @@ export type ReleaseFenceRequest = Message<'personhog.types.v1.ReleaseFenceReques
  */
 export const ReleaseFenceRequestSchema: GenMessage<ReleaseFenceRequest> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 37)
+    messageDesc(file_personhog_types_v1_person, 39)
 
 /**
  * @generated from message personhog.types.v1.ReleaseFenceResponse
@@ -1241,7 +1323,7 @@ export type ReleaseFenceResponse = Message<'personhog.types.v1.ReleaseFenceRespo
  */
 export const ReleaseFenceResponseSchema: GenMessage<ReleaseFenceResponse> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 38)
+    messageDesc(file_personhog_types_v1_person, 40)
 
 /**
  * A sealed source snapshot paired with its precedence ordinal — the
@@ -1269,7 +1351,7 @@ export type SealedSourceSnapshot = Message<'personhog.types.v1.SealedSourceSnaps
  */
 export const SealedSourceSnapshotSchema: GenMessage<SealedSourceSnapshot> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 39)
+    messageDesc(file_personhog_types_v1_person, 41)
 
 /**
  * FoldPersonDocumentRequest folds sealed source snapshots into the merge
@@ -1345,7 +1427,7 @@ export type FoldPersonDocumentRequest = Message<'personhog.types.v1.FoldPersonDo
  */
 export const FoldPersonDocumentRequestSchema: GenMessage<FoldPersonDocumentRequest> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 40)
+    messageDesc(file_personhog_types_v1_person, 42)
 
 /**
  * @generated from message personhog.types.v1.FoldPersonDocumentResponse
@@ -1373,7 +1455,7 @@ export type FoldPersonDocumentResponse = Message<'personhog.types.v1.FoldPersonD
  */
 export const FoldPersonDocumentResponseSchema: GenMessage<FoldPersonDocumentResponse> =
     /*@__PURE__*/
-    messageDesc(file_personhog_types_v1_person, 41)
+    messageDesc(file_personhog_types_v1_person, 43)
 
 /**
  * The kind of lifecycle operation — mirrors lifecycle_op.op_type. The

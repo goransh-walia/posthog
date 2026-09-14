@@ -12,7 +12,7 @@ use personhog_common::grpc::{current_client_name, current_method_name};
 use super::{PostgresStorage, DB_BULK_CHUNKS, DB_QUERY_DURATION, DB_ROWS_RETURNED};
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::traits::PersonLookup;
-use crate::storage::types::{Person, SplitResult, TombstonedDeleteOutcome};
+use crate::storage::types::{Person, SplitResult, TombstonedDeleteOutcome, TrimOutcome};
 
 /// Version offset for split person/PDI rows — mirrors the Django convention.
 const SPLIT_VERSION_OFFSET: i64 = 101;
@@ -575,9 +575,6 @@ impl PersonLookup for PostgresStorage {
         let mut seen = HashSet::with_capacity(uuids.len());
         let unique: Vec<Uuid> = uuids.iter().copied().filter(|u| seen.insert(*u)).collect();
 
-        // Chunk the uuids rather than pre-resolved ids: the resolve has to happen inside each
-        // chunk's transaction, under the row locks, or a revival between resolve and delete
-        // would be lost.
         let chunks: Vec<&[Uuid]> = unique.chunks(self.bulk_chunk_size).collect();
         common_metrics::histogram(
             DB_BULK_CHUNKS,
@@ -596,7 +593,8 @@ impl PersonLookup for PostgresStorage {
                 &self.bulk_primary_pool,
                 team_id,
                 chunk,
-                self.tombstoned_delete_max_distinct_ids,
+                self.tombstoned_limits.max_dependent_rows as i64,
+                self.tombstoned_limits.max_rows_per_transaction as i64,
                 &client,
             )
             .await?;
@@ -606,6 +604,175 @@ impl PersonLookup for PostgresStorage {
             outcome
                 .oversized_uuids
                 .extend(chunk_outcome.oversized_uuids);
+        }
+
+        Ok(outcome)
+    }
+
+    async fn trim_tombstoned_person(
+        &self,
+        team_id: i64,
+        uuid: Uuid,
+        max_rows: i64,
+    ) -> StorageResult<TrimOutcome> {
+        let client = current_client_name();
+        let method = current_method_name();
+        let labels = [
+            (
+                "operation".to_string(),
+                "trim_tombstoned_person".to_string(),
+            ),
+            ("pool".to_string(), "bulk_primary".to_string()),
+            ("client".to_string(), client.to_string()),
+            ("method".to_string(), method.to_string()),
+        ];
+        let _timer = common_metrics::timing_guard(DB_QUERY_DURATION, &labels);
+
+        // The caller picks the step; the server caps it so no call deletes more than it can
+        // finish inside its deadline.
+        let mut budget = max_rows.clamp(1, self.tombstoned_limits.trim_max_rows as i64);
+        let cap = self.tombstoned_limits.max_dependent_rows as i64;
+
+        let mut tx = self.bulk_primary_pool.begin().await?;
+        sqlx::query("SET LOCAL lock_timeout = '2s'")
+            .execute(&mut *tx)
+            .await?;
+
+        // The person lock is what makes the step safe: a revival waits for it, then finds the
+        // person live and leaves the remaining rows alone.
+        let person_id: Option<i64> = sqlx::query_scalar!(
+            r#"
+            SELECT id::bigint AS "id!"
+            FROM posthog_person
+            WHERE team_id = $1 AND uuid = $2 AND is_deleted
+            FOR UPDATE
+            "#,
+            team_id as i32,
+            uuid
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(person_id) = person_id else {
+            tx.commit().await?;
+            return Ok(TrimOutcome::default());
+        };
+
+        let mut outcome = TrimOutcome {
+            person_tombstoned: true,
+            ..TrimOutcome::default()
+        };
+
+        // Tombstoned distinct ids first: they are the rows that grow without bound. A live one
+        // stays, so the person reads as blocked afterwards instead of losing a mapping.
+        let ids: Vec<i64> = sqlx::query_scalar!(
+            r#"
+            SELECT id::bigint AS "id!"
+            FROM posthog_persondistinctid
+            WHERE team_id = $1 AND person_id = $2 AND is_deleted
+            LIMIT $3
+            "#,
+            team_id as i32,
+            person_id,
+            budget
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+        if !ids.is_empty() {
+            outcome.distinct_ids_deleted = sqlx::query!(
+                "DELETE FROM posthog_persondistinctid WHERE team_id = $1 AND id = ANY($2)",
+                team_id as i32,
+                ids.as_slice()
+            )
+            .execute(&mut *tx)
+            .await?
+            .rows_affected() as i64;
+            budget -= outcome.distinct_ids_deleted;
+        }
+
+        if budget > 0 {
+            let ids: Vec<i64> = sqlx::query_scalar!(
+                r#"
+                SELECT id::bigint AS "id!"
+                FROM posthog_featureflaghashkeyoverride
+                WHERE team_id = $1 AND person_id = $2
+                LIMIT $3
+                "#,
+                team_id as i32,
+                person_id,
+                budget
+            )
+            .fetch_all(&mut *tx)
+            .await?;
+            if !ids.is_empty() {
+                outcome.hash_key_overrides_deleted = sqlx::query!(
+                    "DELETE FROM posthog_featureflaghashkeyoverride WHERE team_id = $1 AND id = ANY($2::bigint[])",
+                    team_id as i32,
+                    ids.as_slice()
+                )
+                .execute(&mut *tx)
+                .await?
+                .rows_affected() as i64;
+                budget -= outcome.hash_key_overrides_deleted;
+            }
+        }
+
+        if budget > 0 {
+            let ids: Vec<i64> = sqlx::query_scalar!(
+                r#"
+                SELECT id::bigint AS "id!"
+                FROM posthog_cohortpeople
+                WHERE person_id = $1
+                LIMIT $2
+                "#,
+                person_id,
+                budget
+            )
+            .fetch_all(&mut *tx)
+            .await?;
+            if !ids.is_empty() {
+                outcome.cohort_memberships_deleted = sqlx::query!(
+                    "DELETE FROM posthog_cohortpeople WHERE id = ANY($1)",
+                    ids.as_slice()
+                )
+                .execute(&mut *tx)
+                .await?
+                .rows_affected() as i64;
+            }
+        }
+
+        let counts = probe_dependent_rows(&mut *tx, team_id, &[person_id], cap).await?;
+        outcome.over_cap = counts
+            .get(&person_id)
+            .copied()
+            .unwrap_or_default()
+            .over_cap(cap);
+
+        tx.commit().await?;
+
+        for (operation, value) in [
+            (
+                "trim_tombstoned_person_distinct_ids",
+                outcome.distinct_ids_deleted,
+            ),
+            (
+                "trim_tombstoned_person_hash_key_overrides",
+                outcome.hash_key_overrides_deleted,
+            ),
+            (
+                "trim_tombstoned_person_cohort_memberships",
+                outcome.cohort_memberships_deleted,
+            ),
+        ] {
+            common_metrics::histogram(
+                DB_ROWS_RETURNED,
+                &[
+                    ("operation".to_string(), operation.to_string()),
+                    ("pool".to_string(), "bulk_primary".to_string()),
+                    ("client".to_string(), client.to_string()),
+                    ("method".to_string(), method.to_string()),
+                ],
+                value as f64,
+            );
         }
 
         Ok(outcome)
@@ -1159,15 +1326,97 @@ async fn delete_persons_by_ids_in_tx(
     Ok(result.rows_affected() as i64)
 }
 
-/// One tombstone-guarded chunk in a single transaction. Row locks are taken in id
-/// order, persons first and then their distinct ids. Live-traffic writers work on
-/// live persons, which are never locked here, and the identity saga locks in this
-/// same order; any wait that appears anyway ends at lock_timeout as a retryable error.
+/// Dependent rows of one tombstoned person. Each count is read with `LIMIT cap + 1`, so a
+/// probe never costs more than cap + 1 index entries per table however many rows the person
+/// owns.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct DependentRowCounts {
+    distinct_ids: i64,
+    hash_key_overrides: i64,
+    cohort_memberships: i64,
+}
+
+impl DependentRowCounts {
+    fn total(self) -> i64 {
+        self.distinct_ids + self.hash_key_overrides + self.cohort_memberships
+    }
+
+    fn over_cap(self, cap: i64) -> bool {
+        self.distinct_ids > cap || self.hash_key_overrides > cap || self.cohort_memberships > cap
+    }
+}
+
+async fn probe_dependent_rows<'e, E>(
+    executor: E,
+    team_id: i64,
+    person_ids: &[i64],
+    cap: i64,
+) -> StorageResult<HashMap<i64, DependentRowCounts>>
+where
+    E: sqlx::Executor<'e, Database = Postgres>,
+{
+    let rows = sqlx::query!(
+        r#"
+        SELECT p.id AS "id!",
+            (SELECT count(*) FROM (SELECT 1 FROM posthog_persondistinctid
+                WHERE team_id = $1 AND person_id = p.id LIMIT $3) t) AS "distinct_ids!",
+            (SELECT count(*) FROM (SELECT 1 FROM posthog_featureflaghashkeyoverride
+                WHERE team_id = $1 AND person_id = p.id LIMIT $3) t) AS "hash_key_overrides!",
+            (SELECT count(*) FROM (SELECT 1 FROM posthog_cohortpeople
+                WHERE person_id = p.id LIMIT $3) t) AS "cohort_memberships!"
+        FROM unnest($2::bigint[]) AS p(id)
+        "#,
+        team_id as i32,
+        person_ids,
+        cap + 1
+    )
+    .fetch_all(executor)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.id,
+                DependentRowCounts {
+                    distinct_ids: row.distinct_ids,
+                    hash_key_overrides: row.hash_key_overrides,
+                    cohort_memberships: row.cohort_memberships,
+                },
+            )
+        })
+        .collect())
+}
+
+/// Groups candidates, in the given order, so no group carries more than `budget` dependent
+/// rows. A candidate that does not fit next to the others starts a new group, and a candidate
+/// over the budget on its own still forms a group, so every call makes progress.
+fn group_by_row_budget<T: Copy>(items: &[(T, DependentRowCounts)], budget: i64) -> Vec<Vec<T>> {
+    let mut groups: Vec<Vec<T>> = Vec::new();
+    let mut current: Vec<T> = Vec::new();
+    let mut used = 0i64;
+    for (item, counts) in items {
+        let rows = counts.total();
+        if !current.is_empty() && used + rows > budget {
+            groups.push(std::mem::take(&mut current));
+            used = 0;
+        }
+        current.push(*item);
+        used += rows;
+    }
+    if !current.is_empty() {
+        groups.push(current);
+    }
+    groups
+}
+
+/// One request chunk: resolve the still-tombstoned persons, size their dependent rows, and
+/// delete them in transactions that each stay under `max_rows_per_transaction` dependent rows.
 async fn delete_tombstoned_persons_chunk(
     pool: &PgPool,
     team_id: i64,
     uuids: &[Uuid],
-    max_distinct_ids: usize,
+    max_dependent_rows: i64,
+    max_rows_per_transaction: i64,
     client: &str,
 ) -> StorageResult<TombstonedDeleteOutcome> {
     if uuids.is_empty() {
@@ -1185,6 +1434,125 @@ async fn delete_tombstoned_persons_chunk(
     ];
     let _chunk_timer = common_metrics::timing_guard(DB_QUERY_DURATION, &chunk_labels);
 
+    // Resolved without locks. Each group re-checks the tombstone under its row lock, so a
+    // person revived between here and there drops out of its group; the caller sees it as
+    // neither deleted nor live and the sweep queues it again if it is ever tombstoned again.
+    let candidates: Vec<(i64, Uuid)> = sqlx::query!(
+        r#"
+        SELECT id::bigint AS "id!", uuid AS "uuid!"
+        FROM posthog_person
+        WHERE team_id = $1 AND uuid = ANY($2) AND is_deleted
+        ORDER BY id
+        "#,
+        team_id as i32,
+        uuids
+    )
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|row| (row.id, row.uuid))
+    .collect();
+
+    let skipped_live: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM posthog_person
+        WHERE team_id = $1 AND uuid = ANY($2) AND is_deleted = false
+        "#,
+        team_id as i32,
+        uuids
+    )
+    .fetch_one(pool)
+    .await?;
+
+    if candidates.is_empty() {
+        return Ok(TombstonedDeleteOutcome {
+            skipped_live,
+            ..TombstonedDeleteOutcome::default()
+        });
+    }
+
+    // A person over the cap in any table would hold row locks and write WAL far past the
+    // caller's deadline, so it is reported back for TrimTombstonedPerson instead.
+    let ids: Vec<i64> = candidates.iter().map(|(id, _)| *id).collect();
+    let counts = probe_dependent_rows(pool, team_id, &ids, max_dependent_rows).await?;
+    let mut oversized_uuids = Vec::new();
+    let mut sized: Vec<(Uuid, DependentRowCounts)> = Vec::new();
+    for (id, uuid) in &candidates {
+        let person_counts = counts.get(id).copied().unwrap_or_default();
+        if person_counts.over_cap(max_dependent_rows) {
+            oversized_uuids.push(*uuid);
+        } else {
+            sized.push((*uuid, person_counts));
+        }
+    }
+
+    let groups = group_by_row_budget(&sized, max_rows_per_transaction);
+    common_metrics::histogram(
+        DB_BULK_CHUNKS,
+        &[(
+            "operation".to_string(),
+            "delete_tombstoned_persons_transactions".to_string(),
+        )],
+        groups.len() as f64,
+    );
+
+    let mut outcome = TombstonedDeleteOutcome {
+        skipped_live,
+        oversized_uuids,
+        ..TombstonedDeleteOutcome::default()
+    };
+    for group in groups {
+        let group_outcome = delete_tombstoned_group(pool, team_id, &group, client).await?;
+        outcome.deleted += group_outcome.deleted;
+        outcome.blocked_uuids.extend(group_outcome.blocked_uuids);
+    }
+
+    for (operation, value) in [
+        (
+            "delete_tombstoned_persons_blocked",
+            outcome.blocked_uuids.len(),
+        ),
+        (
+            "delete_tombstoned_persons_oversized",
+            outcome.oversized_uuids.len(),
+        ),
+        (
+            "delete_tombstoned_persons_skipped_live",
+            skipped_live as usize,
+        ),
+    ] {
+        common_metrics::histogram(
+            DB_ROWS_RETURNED,
+            &[
+                ("operation".to_string(), operation.to_string()),
+                ("pool".to_string(), "bulk_primary".to_string()),
+                ("client".to_string(), client.to_string()),
+                ("method".to_string(), current_method_name().to_string()),
+            ],
+            value as f64,
+        );
+    }
+
+    Ok(outcome)
+}
+
+#[derive(Debug, Default)]
+struct GroupOutcome {
+    deleted: i64,
+    blocked_uuids: Vec<Uuid>,
+}
+
+/// One tombstone-guarded transaction. Row locks are taken in id order, persons first and then
+/// their distinct ids. Live-traffic writers work on live persons, which are never locked here,
+/// and the identity saga locks in this same order; any wait that appears anyway ends at
+/// lock_timeout as a retryable error.
+async fn delete_tombstoned_group(
+    pool: &PgPool,
+    team_id: i64,
+    uuids: &[Uuid],
+    client: &str,
+) -> StorageResult<GroupOutcome> {
     let mut tx = pool.begin().await?;
 
     // A writer holding one of these rows is mid-revival or mid-merge. Wait briefly, then hand
@@ -1213,57 +1581,10 @@ async fn delete_tombstoned_persons_chunk(
     .map(|row| (row.id, row.uuid))
     .collect();
 
-    let skipped_live: i64 = sqlx::query_scalar!(
-        r#"
-        SELECT count(*) AS "count!"
-        FROM posthog_person
-        WHERE team_id = $1 AND uuid = ANY($2) AND is_deleted = false
-        "#,
-        team_id as i32,
-        uuids
-    )
-    .fetch_one(&mut *tx)
-    .await?;
-
     if candidates.is_empty() {
         tx.commit().await?;
-        return Ok(TombstonedDeleteOutcome {
-            skipped_live,
-            ..TombstonedDeleteOutcome::default()
-        });
+        return Ok(GroupOutcome::default());
     }
-
-    // A person over the cap would hold row locks and write WAL far past the caller's deadline,
-    // so it is reported back instead. The probe reads at most cap + 1 index entries per person.
-    let all_candidate_ids: Vec<i64> = candidates.iter().map(|(id, _)| *id).collect();
-    let oversized_ids: HashSet<i64> = sqlx::query_scalar!(
-        r#"
-        SELECT p.id AS "id!"
-        FROM unnest($2::bigint[]) AS p(id)
-        WHERE EXISTS (
-            SELECT 1
-            FROM posthog_persondistinctid
-            WHERE team_id = $1 AND person_id = p.id
-            OFFSET $3 LIMIT 1
-        )
-        "#,
-        team_id as i32,
-        all_candidate_ids.as_slice(),
-        max_distinct_ids as i64
-    )
-    .fetch_all(&mut *tx)
-    .await?
-    .into_iter()
-    .collect();
-    let oversized_uuids: Vec<Uuid> = candidates
-        .iter()
-        .filter(|(id, _)| oversized_ids.contains(id))
-        .map(|(_, uuid)| *uuid)
-        .collect();
-    let candidates: Vec<(i64, Uuid)> = candidates
-        .into_iter()
-        .filter(|(id, _)| !oversized_ids.contains(id))
-        .collect();
     let candidate_ids: Vec<i64> = candidates.iter().map(|(id, _)| *id).collect();
 
     // Lock the distinct ids too and read their state under the lock. A live mapping means
@@ -1297,26 +1618,6 @@ async fn delete_tombstoned_persons_chunk(
         .map(|(id, _)| *id)
         .collect();
 
-    for (operation, value) in [
-        ("delete_tombstoned_persons_blocked", blocked_uuids.len()),
-        ("delete_tombstoned_persons_oversized", oversized_uuids.len()),
-        (
-            "delete_tombstoned_persons_skipped_live",
-            skipped_live as usize,
-        ),
-    ] {
-        common_metrics::histogram(
-            DB_ROWS_RETURNED,
-            &[
-                ("operation".to_string(), operation.to_string()),
-                ("pool".to_string(), "bulk_primary".to_string()),
-                ("client".to_string(), client.to_string()),
-                ("method".to_string(), current_method_name().to_string()),
-            ],
-            value as f64,
-        );
-    }
-
     // The hash key override FK cascades in production but not in every environment built from
     // the sqlx migrations, so remove the overrides here instead of relying on the cascade.
     if !victims.is_empty() {
@@ -1333,10 +1634,59 @@ async fn delete_tombstoned_persons_chunk(
 
     tx.commit().await?;
 
-    Ok(TombstonedDeleteOutcome {
+    Ok(GroupOutcome {
         deleted,
-        skipped_live,
         blocked_uuids,
-        oversized_uuids,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{group_by_row_budget, DependentRowCounts};
+
+    fn counts(
+        distinct_ids: i64,
+        hash_key_overrides: i64,
+        cohort_memberships: i64,
+    ) -> DependentRowCounts {
+        DependentRowCounts {
+            distinct_ids,
+            hash_key_overrides,
+            cohort_memberships,
+        }
+    }
+
+    #[test]
+    fn groups_stay_under_the_budget_and_keep_order() {
+        let items = [
+            ("a", counts(2, 1, 0)),
+            ("b", counts(3, 0, 0)),
+            ("c", counts(0, 0, 4)),
+            ("d", counts(1, 1, 1)),
+            ("e", counts(0, 0, 0)),
+        ];
+
+        assert_eq!(
+            group_by_row_budget(&items, 6),
+            vec![vec!["a", "b"], vec!["c"], vec!["d", "e"]]
+        );
+    }
+
+    #[test]
+    fn a_candidate_over_the_budget_still_gets_its_own_group() {
+        let items = [("big", counts(9, 0, 0)), ("small", counts(1, 0, 0))];
+
+        assert_eq!(
+            group_by_row_budget(&items, 5),
+            vec![vec!["big"], vec!["small"]]
+        );
+    }
+
+    #[test]
+    fn over_cap_checks_each_table_on_its_own() {
+        assert!(counts(4, 0, 0).over_cap(3));
+        assert!(counts(0, 4, 0).over_cap(3));
+        assert!(counts(0, 0, 4).over_cap(3));
+        assert!(!counts(3, 3, 3).over_cap(3));
+    }
 }

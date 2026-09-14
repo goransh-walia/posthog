@@ -1,4 +1,7 @@
-use personhog_replica::storage::{postgres::PostgresStorage, FullStorage};
+use personhog_replica::storage::{
+    postgres::{PostgresStorage, TombstonedDeleteLimits},
+    FullStorage,
+};
 use rand::Rng;
 use sqlx::postgres::PgPool;
 use std::sync::Arc;
@@ -36,7 +39,12 @@ impl TestContext {
             pool.clone(),
             50, // bulk_chunk_size — small so parallel path is exercised with fewer test rows
             5,  // bulk_max_concurrent_chunks
-            3,  // tombstoned_delete_max_distinct_ids — small so the oversized path needs few rows
+            // Small bounds so the oversized, grouping and clamp paths need few rows.
+            TombstonedDeleteLimits {
+                max_dependent_rows: 3,
+                max_rows_per_transaction: 9,
+                trim_max_rows: 10,
+            },
         ));
         let team_id = random_team_id();
 

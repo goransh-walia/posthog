@@ -26,9 +26,22 @@ pub struct TombstonedDeleteOutcome {
     /// Persons still tombstoned but referenced by a live distinct id. Untouched. Ingestion never
     /// produces this state, so the caller should surface it rather than retry blindly.
     pub blocked_uuids: Vec<Uuid>,
-    /// Persons still tombstoned but owning more distinct ids than one transaction may delete.
-    /// Untouched.
+    /// Persons still tombstoned but owning more rows in a dependent table than one transaction
+    /// may delete. Untouched; TrimTombstonedPerson takes them down first.
     pub oversized_uuids: Vec<Uuid>,
+}
+
+/// One bounded trim of a tombstoned person's dependent rows.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TrimOutcome {
+    /// False when the person is live or missing. Nothing was deleted then.
+    pub person_tombstoned: bool,
+    pub distinct_ids_deleted: i64,
+    pub hash_key_overrides_deleted: i64,
+    pub cohort_memberships_deleted: i64,
+    /// A dependent table still holds more rows than the cap. With nothing deleted in this call,
+    /// the remaining rows are live distinct ids and the person is blocked, not oversized.
+    pub over_cap: bool,
 }
 
 #[derive(Debug, Clone)]

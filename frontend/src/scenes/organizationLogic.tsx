@@ -33,6 +33,22 @@ const ALLOWED_WHILE_BLOCKED: Record<string, string[]> = {
     ],
 }
 
+/**
+ * Whether the path names a project the current organization does not own. On a full page load
+ * `AutoProjectMiddleware` switches the user into that project's organization before the block is
+ * checked; a client-side push reaches no server, so defer to the page load rather than judging the
+ * destination against an organization it does not belong to. False while the team list is unknown,
+ * which keeps the block on rather than opening the app on missing data.
+ */
+function pathLeavesCurrentOrganization(organization: OrganizationType | null, pathname: string): boolean {
+    const teams = organization?.teams
+    if (!teams) {
+        return false
+    }
+    const projectId = pathname.match(/^\/project\/([^/]+)/)?.[1]
+    return projectId !== undefined && !teams.some((team) => String(team.id) === projectId)
+}
+
 function organizationBlockPage(organization: OrganizationType | null): string | null {
     if (organization?.is_pending_deletion) {
         return '/organization-pending-deletion'
@@ -370,7 +386,7 @@ export const organizationLogic = kea<organizationLogicType>([
         },
         locationChanged: ({ pathname }) => {
             const blockPage = organizationBlockPage(values.currentOrganization)
-            if (blockPage === null) {
+            if (blockPage === null || pathLeavesCurrentOrganization(values.currentOrganization, pathname)) {
                 return
             }
             // The pathname can carry the router's `/project/<id>` prefix while the allowed pages

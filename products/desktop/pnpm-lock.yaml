@@ -301,8 +301,8 @@ importers:
         specifier: 1.1.0
         version: 1.1.0(patch_hash=4dfdf785f5ac51a03f5d6032371cebe89036381acd403621f250a896245647c5)
       posthog-node:
-        specifier: ^5.51.8
-        version: 5.51.8(rxjs@7.8.2)
+        specifier: ^5.52.3
+        version: 5.52.3(rxjs@7.8.2)
       react:
         specifier: 19.2.6
         version: 19.2.6
@@ -6212,14 +6212,14 @@ packages:
     engines: {node: '>=14.14', npm: '>=6'}
     hasBin: true
 
-  '@posthog/core@1.51.1':
-    resolution: {integrity: sha512-k0aDkW2XR7G0CWVnL0MZdY8wS5PhYvFtpWLdC2vD/sIUB6BGHhxNLgfVd2mLpmuf1zCBz5Q+p8g/01VL88s0Hg==}
-
   '@posthog/core@1.53.2':
     resolution: {integrity: sha512-Knx8442G2LyPVIzLvhcBX/TIdeHpZhrYrtZou3Uw8FWfbr9gQtQeOZDCog3MWcDxJ+4vAnMAAOzf5cYpc7Gxyw==}
 
   '@posthog/core@1.54.0':
     resolution: {integrity: sha512-168MROFCM9YsGcCrbI4zukwR1lmLtKCvJk1NRuRS3PlhpMDBgmdNBxefPifb7nBCQz+61lrWq70saXdFhNdbiQ==}
+
+  '@posthog/core@1.54.1':
+    resolution: {integrity: sha512-UvpnMylZ25ncVGi1jJjZlrN09VOdwYy34t1fh61T6aNZhtRA5aIwLIvaD6nOftOhi8d/DBCZi43wTjzhVlMotw==}
 
   '@posthog/hedgehog-mode@0.0.53':
     resolution: {integrity: sha512-Qyd9DckDg1Z/vT3mpKyuMemJHWpYD0k0Gob7hWCNMCDSYm/NcpDS1uX8PRoh3Z7HF2kBkZ7j6HCSUIG7Ha/j4Q==}
@@ -6256,9 +6256,6 @@ packages:
     resolution: {integrity: sha512-QdSjBt+wt+j2VwLADpsr1Ii2j8F5rWe+V/m9O9PuZXWT8nUne8ML5ciMxAmsGTIIfVwmLhdXPtDlJEc2LuJ9rg==}
     peerDependencies:
       rollup: 4.59.0
-
-  '@posthog/types@1.409.2':
-    resolution: {integrity: sha512-hZ4EXZ1+BstMaxUkmAEg3qvgMR/S00Xb+wEwY/Tx2Dr9dBgiBWrERxaq2UwICh/Fh/vVXpKZT/0SkRtO8JKQ2A==}
 
   '@posthog/types@1.411.1':
     resolution: {integrity: sha512-Gd7tnSYctcSXup3naVlAgavvenByRao6rsSYdMgWgP35KE9jFn+rMHNRJeI5LNjJuLzMXHEVcgzAN7xcATefdw==}
@@ -13912,8 +13909,8 @@ packages:
       react:
         optional: true
 
-  posthog-node@5.51.8:
-    resolution: {integrity: sha512-TCqgAYbACwb/D3VI2S861ugD+FavvowQfak8eMwS/wATS+g0Wj+YpsABrBEKi+ZP3Y5SJDcoc7bIH49rlGo1Ww==}
+  posthog-node@5.52.3:
+    resolution: {integrity: sha512-eRmstlXCltl9VxKTOghckk2HvnLkYSAbqW+1fAbIeQKTXcf9jK6ns2MKM9Mcb8AzUMoR3QpNNeWAgGEXtSmVgQ==}
     engines: {node: ^20.20.0 || >=22.22.0}
     peerDependencies:
       rxjs: ^7.0.0
@@ -20902,15 +20899,15 @@ snapshots:
     dependencies:
       detect-libc: 2.1.2
 
-  '@posthog/core@1.51.1':
-    dependencies:
-      '@posthog/types': 1.409.2
-
   '@posthog/core@1.53.2':
     dependencies:
       '@posthog/types': 1.411.1
 
   '@posthog/core@1.54.0':
+    dependencies:
+      '@posthog/types': 1.412.0
+
+  '@posthog/core@1.54.1':
     dependencies:
       '@posthog/types': 1.412.0
 
@@ -20978,8 +20975,6 @@ snapshots:
       '@posthog/plugin-utils': 2.0.0
       magic-string: 0.30.21
       rollup: 4.62.2
-
-  '@posthog/types@1.409.2': {}
 
   '@posthog/types@1.411.1': {}
 
@@ -21945,7 +21940,9 @@ snapshots:
       metro-runtime: 0.84.4
     transitivePeerDependencies:
       - '@babel/core'
+      - bufferutil
       - supports-color
+      - utf-8-validate
 
   '@react-native/normalize-colors@0.74.89': {}
 
@@ -23966,7 +23963,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.15
       tinyrainbow: 3.1.0
-      vitest: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.12.0)(@vitest/coverage-v8@4.1.9)(@vitest/ui@4.1.8)(jsdom@26.1.0)(msw@2.12.8(@types/node@24.12.0)(typescript@5.9.3))(rolldown-vite@7.3.1(@emnapi/core@1.11.2)(@emnapi/runtime@1.11.2)(@types/node@24.12.0)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.46.0)(tsx@4.22.4)(yaml@2.9.0))
+      vitest: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@25.2.0)(@vitest/ui@4.1.8)(jsdom@26.1.0)(msw@2.12.8(@types/node@25.2.0)(typescript@5.9.3))(vite@7.3.5(@types/node@25.2.0)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.46.0)(tsx@4.22.4)(yaml@2.9.0))
 
   '@vitest/utils@3.2.4':
     dependencies:
@@ -29997,9 +29994,9 @@ snapshots:
     transitivePeerDependencies:
       - preact-render-to-string
 
-  posthog-node@5.51.8(rxjs@7.8.2):
+  posthog-node@5.52.3(rxjs@7.8.2):
     dependencies:
-      '@posthog/core': 1.51.1
+      '@posthog/core': 1.54.1
     optionalDependencies:
       rxjs: 7.8.2
 

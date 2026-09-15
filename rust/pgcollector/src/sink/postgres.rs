@@ -52,8 +52,13 @@ fn datname_for(snap: &Snapshot, row: &crate::collector::Row) -> Option<String> {
         })
 }
 
-const MIGRATIONS: &[(&str, &str)] =
-    &[("0001_base", include_str!("../../migrations/0001_base.sql"))];
+const MIGRATIONS: &[(&str, &str)] = &[
+    ("0001_base", include_str!("../../migrations/0001_base.sql")),
+    (
+        "0002_query_texts",
+        include_str!("../../migrations/0002_query_texts.sql"),
+    ),
+];
 
 impl PostgresSink {
     pub async fn connect(cfg: &SinkConfig) -> Result<Self> {

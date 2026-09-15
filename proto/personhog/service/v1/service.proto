@@ -82,13 +82,10 @@ service PersonHogService {
   rpc DeletePersons(personhog.types.v1.DeletePersonsRequest) returns (personhog.types.v1.DeletePersonsResponse);
   // WARNING: Same routing caveat as DeletePersons above.
   rpc DeletePersonsBatchForTeam(personhog.types.v1.DeletePersonsBatchForTeamRequest) returns (personhog.types.v1.DeletePersonsBatchForTeamResponse);
-  // Deletes only persons that are still tombstoned when the delete runs.
+  // Deletes only persons that are still tombstoned when the delete runs, a bounded
+  // number of rows per call; pending uuids are sent again by the caller.
   // WARNING: Same routing caveat as DeletePersons above.
   rpc DeleteTombstonedPersons(personhog.types.v1.DeleteTombstonedPersonsRequest) returns (personhog.types.v1.DeleteTombstonedPersonsResponse);
-  // Deletes a bounded batch of one tombstoned person's dependent rows, so a person
-  // DeleteTombstonedPersons reports as oversized can be taken down in steps.
-  // WARNING: Same routing caveat as DeletePersons above.
-  rpc TrimTombstonedPerson(personhog.types.v1.TrimTombstonedPersonRequest) returns (personhog.types.v1.TrimTombstonedPersonResponse);
 
   // Person split
   // WARNING: Same routing caveat as DeletePersons above — write operation on person data

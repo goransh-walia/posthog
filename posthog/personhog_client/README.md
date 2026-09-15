@@ -69,7 +69,7 @@ The `PersonHogClient` in `client.py` exposes typed methods for every RPC:
 `get_distinct_ids_for_person`, `get_distinct_ids_for_persons`
 
 **Person deletes:**
-`delete_persons`, `delete_persons_batch_for_team`, `delete_tombstoned_persons` (deletes only while still tombstoned and under the replica's dependent-row cap; used by the persons cleanup drain), `trim_tombstoned_person` (deletes a bounded batch of one tombstoned person's dependent rows so an oversized person can be taken down in steps)
+`delete_persons`, `delete_persons_batch_for_team`, `delete_tombstoned_persons` (deletes only while still tombstoned, a bounded number of dependent rows per call; persons it did not finish come back as pending and are sent again; used by the persons cleanup drain)
 
 **Person split:**
 `split_person` — splits distinct_ids off a person onto new persons (max 250 per request); the sole write path for person splits, with no ORM fallback

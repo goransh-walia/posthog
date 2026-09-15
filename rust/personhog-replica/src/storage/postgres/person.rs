@@ -12,7 +12,7 @@ use personhog_common::grpc::{current_client_name, current_method_name};
 use super::{PostgresStorage, DB_BULK_CHUNKS, DB_QUERY_DURATION, DB_ROWS_RETURNED};
 use crate::storage::error::{StorageError, StorageResult};
 use crate::storage::traits::PersonLookup;
-use crate::storage::types::{Person, SplitResult, TombstonedDeleteOutcome, TrimOutcome};
+use crate::storage::types::{Person, SplitResult, TombstonedDeleteOutcome};
 
 /// Version offset for split person/PDI rows — mirrors the Django convention.
 const SPLIT_VERSION_OFFSET: i64 = 101;
@@ -553,6 +553,7 @@ impl PersonLookup for PostgresStorage {
         &self,
         team_id: i64,
         uuids: &[Uuid],
+        max_rows: i64,
     ) -> StorageResult<TombstonedDeleteOutcome> {
         if uuids.is_empty() {
             return Ok(TombstonedDeleteOutcome::default());
@@ -575,192 +576,194 @@ impl PersonLookup for PostgresStorage {
         let mut seen = HashSet::with_capacity(uuids.len());
         let unique: Vec<Uuid> = uuids.iter().copied().filter(|u| seen.insert(*u)).collect();
 
-        let chunks: Vec<&[Uuid]> = unique.chunks(self.bulk_chunk_size).collect();
-        common_metrics::histogram(
-            DB_BULK_CHUNKS,
-            &[(
-                "operation".to_string(),
-                "delete_tombstoned_persons".to_string(),
-            )],
-            chunks.len() as f64,
-        );
-
-        // Sequential on purpose. This serves a background drain, so one bulk connection at a
-        // time keeps its footprint on the persons writer small and predictable.
-        let mut outcome = TombstonedDeleteOutcome::default();
-        for chunk in chunks {
-            let chunk_outcome = delete_tombstoned_persons_chunk(
-                &self.bulk_primary_pool,
-                team_id,
-                chunk,
-                self.tombstoned_limits.max_dependent_rows as i64,
-                self.tombstoned_limits.max_rows_per_transaction as i64,
-                &client,
-            )
-            .await?;
-            outcome.deleted += chunk_outcome.deleted;
-            outcome.skipped_live += chunk_outcome.skipped_live;
-            outcome.blocked_uuids.extend(chunk_outcome.blocked_uuids);
-            outcome
-                .oversized_uuids
-                .extend(chunk_outcome.oversized_uuids);
-        }
-
-        Ok(outcome)
-    }
-
-    async fn trim_tombstoned_person(
-        &self,
-        team_id: i64,
-        uuid: Uuid,
-        max_rows: i64,
-    ) -> StorageResult<TrimOutcome> {
-        let client = current_client_name();
-        let method = current_method_name();
-        let labels = [
-            (
-                "operation".to_string(),
-                "trim_tombstoned_person".to_string(),
-            ),
-            ("pool".to_string(), "bulk_primary".to_string()),
-            ("client".to_string(), client.to_string()),
-            ("method".to_string(), method.to_string()),
-        ];
-        let _timer = common_metrics::timing_guard(DB_QUERY_DURATION, &labels);
-
-        // The caller picks the step; the server caps it so no call deletes more than it can
-        // finish inside its deadline.
-        let mut budget = max_rows.clamp(1, self.tombstoned_limits.trim_max_rows as i64);
-        let cap = self.tombstoned_limits.max_dependent_rows as i64;
+        // The caller picks the row budget; the server caps it so no call outlives its deadline.
+        let budget = max_rows.clamp(1, self.tombstoned_delete_max_rows as i64);
 
         let mut tx = self.bulk_primary_pool.begin().await?;
+        // A held row means a revival or merge in flight: fail fast and let the caller retry. Kept
+        // under the router's 5 s backend deadline so the caller sees an error, not a timeout.
         sqlx::query("SET LOCAL lock_timeout = '2s'")
             .execute(&mut *tx)
             .await?;
 
-        // The person lock is what makes the step safe: a revival waits for it, then finds the
-        // person live and leaves the remaining rows alone.
-        let person_id: Option<i64> = sqlx::query_scalar!(
+        // Resolved without locks. The delete re-checks the tombstone under its row lock, so a
+        // person revived in between drops out and reads as neither deleted nor live.
+        let candidates: Vec<(i64, Uuid)> = sqlx::query!(
+            r#"
+            SELECT id::bigint AS "id!", uuid AS "uuid!"
+            FROM posthog_person
+            WHERE team_id = $1 AND uuid = ANY($2) AND is_deleted
+            ORDER BY id
+            "#,
+            team_id as i32,
+            unique.as_slice()
+        )
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .map(|row| (row.id, row.uuid))
+        .collect();
+
+        let skipped_live: i64 = sqlx::query_scalar!(
+            r#"
+            SELECT count(*) AS "count!"
+            FROM posthog_person
+            WHERE team_id = $1 AND uuid = ANY($2) AND is_deleted = false
+            "#,
+            team_id as i32,
+            unique.as_slice()
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let mut outcome = TombstonedDeleteOutcome {
+            skipped_live,
+            ..TombstonedDeleteOutcome::default()
+        };
+        if candidates.is_empty() {
+            tx.commit().await?;
+            return Ok(outcome);
+        }
+
+        // Each probe reads at most `remaining + 1` index entries per table per person, so its
+        // cost is bounded by the budget however many rows a person owns.
+        let mut admission = Admission::new(budget, self.bulk_chunk_size);
+        for batch in candidates.chunks(PROBE_BATCH_PERSONS) {
+            if !admission.wants_more() {
+                admission.defer(batch.iter().map(|(_, uuid)| *uuid));
+                continue;
+            }
+            let ids: Vec<i64> = batch.iter().map(|(id, _)| *id).collect();
+            let counts =
+                probe_dependent_rows(&mut *tx, team_id, &ids, admission.probe_limit()).await?;
+            for (id, uuid) in batch {
+                admission.offer(*id, *uuid, counts.get(id).copied().unwrap_or_default());
+            }
+        }
+        let Admission {
+            remaining,
+            admitted,
+            trim,
+            mut pending,
+            ..
+        } = admission;
+
+        // Lock only the persons that are still tombstoned, in id order. READ COMMITTED re-checks
+        // is_deleted on the row version that wins the lock, so a person revived a moment ago
+        // drops out here. Live writers touch live persons, never locked here, and the identity
+        // saga locks persons before distinct ids in this same order.
+        let mut lock_ids: Vec<i64> = admitted.iter().map(|(id, _)| *id).collect();
+        lock_ids.extend(trim.map(|(id, _)| id));
+        let locked: HashSet<i64> = sqlx::query_scalar!(
             r#"
             SELECT id::bigint AS "id!"
             FROM posthog_person
-            WHERE team_id = $1 AND uuid = $2 AND is_deleted
+            WHERE team_id = $1 AND id = ANY($2) AND is_deleted
+            ORDER BY id
             FOR UPDATE
             "#,
             team_id as i32,
-            uuid
-        )
-        .fetch_optional(&mut *tx)
-        .await?;
-        let Some(person_id) = person_id else {
-            tx.commit().await?;
-            return Ok(TrimOutcome::default());
-        };
-
-        let mut outcome = TrimOutcome {
-            person_tombstoned: true,
-            ..TrimOutcome::default()
-        };
-
-        // Tombstoned distinct ids first: they are the rows that grow without bound. A live one
-        // stays, so the person reads as blocked afterwards instead of losing a mapping.
-        let ids: Vec<i64> = sqlx::query_scalar!(
-            r#"
-            SELECT id::bigint AS "id!"
-            FROM posthog_persondistinctid
-            WHERE team_id = $1 AND person_id = $2 AND is_deleted
-            LIMIT $3
-            "#,
-            team_id as i32,
-            person_id,
-            budget
+            lock_ids.as_slice()
         )
         .fetch_all(&mut *tx)
-        .await?;
-        if !ids.is_empty() {
-            outcome.distinct_ids_deleted = sqlx::query!(
-                "DELETE FROM posthog_persondistinctid WHERE team_id = $1 AND id = ANY($2)",
+        .await?
+        .into_iter()
+        .collect();
+
+        let admitted: Vec<(i64, Uuid)> = admitted
+            .into_iter()
+            .filter(|(id, _)| locked.contains(id))
+            .collect();
+        let admitted_ids: Vec<i64> = admitted.iter().map(|(id, _)| *id).collect();
+
+        // Lock the distinct ids too and read their state under the lock. A live mapping means
+        // ingestion can still reach the person, so it must stay.
+        let mut live_owners: HashSet<i64> = HashSet::new();
+        if !admitted_ids.is_empty() {
+            live_owners = sqlx::query!(
+                r#"
+                SELECT person_id AS "person_id!", is_deleted AS "is_deleted!"
+                FROM posthog_persondistinctid
+                WHERE team_id = $1 AND person_id = ANY($2)
+                ORDER BY id
+                FOR UPDATE
+                "#,
                 team_id as i32,
-                ids.as_slice()
+                admitted_ids.as_slice()
+            )
+            .fetch_all(&mut *tx)
+            .await?
+            .into_iter()
+            .filter(|row| !row.is_deleted)
+            .map(|row| row.person_id)
+            .collect();
+        }
+
+        let (blocked, victims): (Vec<(i64, Uuid)>, Vec<(i64, Uuid)>) = admitted
+            .into_iter()
+            .partition(|(id, _)| live_owners.contains(id));
+        outcome.blocked_uuids = blocked.into_iter().map(|(_, uuid)| uuid).collect();
+        let victim_ids: Vec<i64> = victims.iter().map(|(id, _)| *id).collect();
+
+        // The hash key override FK cascades in production but not in every environment built
+        // from the sqlx migrations, so remove the overrides here instead of relying on the cascade.
+        if !victim_ids.is_empty() {
+            let overrides = sqlx::query!(
+                "DELETE FROM posthog_featureflaghashkeyoverride WHERE team_id = $1 AND person_id = ANY($2)",
+                team_id as i32,
+                victim_ids.as_slice()
             )
             .execute(&mut *tx)
-            .await?
-            .rows_affected() as i64;
-            budget -= outcome.distinct_ids_deleted;
-        }
-
-        if budget > 0 {
-            let ids: Vec<i64> = sqlx::query_scalar!(
-                r#"
-                SELECT id::bigint AS "id!"
-                FROM posthog_featureflaghashkeyoverride
-                WHERE team_id = $1 AND person_id = $2
-                LIMIT $3
-                "#,
-                team_id as i32,
-                person_id,
-                budget
-            )
-            .fetch_all(&mut *tx)
             .await?;
-            if !ids.is_empty() {
-                outcome.hash_key_overrides_deleted = sqlx::query!(
-                    "DELETE FROM posthog_featureflaghashkeyoverride WHERE team_id = $1 AND id = ANY($2::bigint[])",
-                    team_id as i32,
-                    ids.as_slice()
-                )
-                .execute(&mut *tx)
-                .await?
-                .rows_affected() as i64;
-                budget -= outcome.hash_key_overrides_deleted;
+            outcome.rows_deleted += overrides.rows_affected() as i64;
+        }
+        let rows =
+            delete_persons_by_ids_in_tx(&mut tx, team_id, &victim_ids, &client, true).await?;
+        outcome.deleted = rows.persons;
+        outcome.rows_deleted += rows.dependents();
+
+        // The first person that did not fit gives up as many rows as the leftover allows and
+        // stays pending, unless it turned out to be live again or to own a live distinct id.
+        if let Some((id, uuid)) = trim {
+            let still_pending = if !locked.contains(&id) {
+                false
+            } else {
+                match trim_locked_person(&mut tx, team_id, id, remaining).await? {
+                    Some(rows) => {
+                        outcome.rows_deleted += rows;
+                        true
+                    }
+                    None => {
+                        outcome.blocked_uuids.push(uuid);
+                        false
+                    }
+                }
+            };
+            if !still_pending {
+                pending.retain(|u| *u != uuid);
             }
         }
-
-        if budget > 0 {
-            let ids: Vec<i64> = sqlx::query_scalar!(
-                r#"
-                SELECT id::bigint AS "id!"
-                FROM posthog_cohortpeople
-                WHERE person_id = $1
-                LIMIT $2
-                "#,
-                person_id,
-                budget
-            )
-            .fetch_all(&mut *tx)
-            .await?;
-            if !ids.is_empty() {
-                outcome.cohort_memberships_deleted = sqlx::query!(
-                    "DELETE FROM posthog_cohortpeople WHERE id = ANY($1)",
-                    ids.as_slice()
-                )
-                .execute(&mut *tx)
-                .await?
-                .rows_affected() as i64;
-            }
-        }
-
-        let counts = probe_dependent_rows(&mut *tx, team_id, &[person_id], cap).await?;
-        outcome.over_cap = counts
-            .get(&person_id)
-            .copied()
-            .unwrap_or_default()
-            .over_cap(cap);
+        outcome.pending_uuids = pending;
 
         tx.commit().await?;
 
         for (operation, value) in [
+            ("delete_tombstoned_persons_deleted", outcome.deleted),
             (
-                "trim_tombstoned_person_distinct_ids",
-                outcome.distinct_ids_deleted,
+                "delete_tombstoned_persons_skipped_live",
+                outcome.skipped_live,
             ),
             (
-                "trim_tombstoned_person_hash_key_overrides",
-                outcome.hash_key_overrides_deleted,
+                "delete_tombstoned_persons_blocked",
+                outcome.blocked_uuids.len() as i64,
             ),
             (
-                "trim_tombstoned_person_cohort_memberships",
-                outcome.cohort_memberships_deleted,
+                "delete_tombstoned_persons_pending",
+                outcome.pending_uuids.len() as i64,
+            ),
+            (
+                "delete_tombstoned_persons_rows_deleted",
+                outcome.rows_deleted,
             ),
         ] {
             common_metrics::histogram(
@@ -1219,12 +1222,26 @@ async fn delete_persons_by_ids_chunk(
     let _chunk_timer = common_metrics::timing_guard(DB_QUERY_DURATION, &chunk_labels);
 
     let mut tx = pool.begin().await?;
-    let deleted =
+    let rows =
         delete_persons_by_ids_in_tx(&mut tx, team_id, person_ids, client, delete_cohortpeople)
             .await?;
     tx.commit().await?;
 
-    Ok(deleted)
+    Ok(rows.persons)
+}
+
+/// Rows removed by one `delete_persons_by_ids_in_tx` call.
+#[derive(Debug, Clone, Copy, Default)]
+struct PersonRowsDeleted {
+    persons: i64,
+    distinct_ids: i64,
+    cohort_memberships: i64,
+}
+
+impl PersonRowsDeleted {
+    fn dependents(self) -> i64 {
+        self.distinct_ids + self.cohort_memberships
+    }
 }
 
 /// The delete statements every person delete path shares, run inside the caller's
@@ -1235,10 +1252,11 @@ async fn delete_persons_by_ids_in_tx(
     person_ids: &[i64],
     client: &str,
     delete_cohortpeople: bool,
-) -> StorageResult<i64> {
+) -> StorageResult<PersonRowsDeleted> {
     if person_ids.is_empty() {
-        return Ok(0);
+        return Ok(PersonRowsDeleted::default());
     }
+    let mut rows = PersonRowsDeleted::default();
 
     // Delete distinct_id rows first — FK is NO ACTION.
     let did_result = sqlx::query!(
@@ -1251,6 +1269,7 @@ async fn delete_persons_by_ids_in_tx(
     )
     .execute(&mut **tx)
     .await?;
+    rows.distinct_ids = did_result.rows_affected() as i64;
 
     common_metrics::histogram(
         DB_ROWS_RETURNED,
@@ -1281,6 +1300,7 @@ async fn delete_persons_by_ids_in_tx(
         )
         .execute(&mut **tx)
         .await?;
+        rows.cohort_memberships = cohort_result.rows_affected() as i64;
 
         common_metrics::histogram(
             DB_ROWS_RETURNED,
@@ -1322,13 +1342,16 @@ async fn delete_persons_by_ids_in_tx(
         ],
         result.rows_affected() as f64,
     );
+    rows.persons = result.rows_affected() as i64;
 
-    Ok(result.rows_affected() as i64)
+    Ok(rows)
 }
 
-/// Dependent rows of one tombstoned person. Each count is read with `LIMIT cap + 1`, so a
-/// probe never costs more than cap + 1 index entries per table however many rows the person
-/// owns.
+/// Persons probed per statement while admitting a request.
+const PROBE_BATCH_PERSONS: usize = 25;
+
+/// Dependent rows of one tombstoned person, each count read with a `LIMIT`, so a probe never
+/// costs more than that many index entries per table however many rows the person owns.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct DependentRowCounts {
     distinct_ids: i64,
@@ -1340,17 +1363,13 @@ impl DependentRowCounts {
     fn total(self) -> i64 {
         self.distinct_ids + self.hash_key_overrides + self.cohort_memberships
     }
-
-    fn over_cap(self, cap: i64) -> bool {
-        self.distinct_ids > cap || self.hash_key_overrides > cap || self.cohort_memberships > cap
-    }
 }
 
 async fn probe_dependent_rows<'e, E>(
     executor: E,
     team_id: i64,
     person_ids: &[i64],
-    cap: i64,
+    limit: i64,
 ) -> StorageResult<HashMap<i64, DependentRowCounts>>
 where
     E: sqlx::Executor<'e, Database = Postgres>,
@@ -1368,7 +1387,7 @@ where
         "#,
         team_id as i32,
         person_ids,
-        cap + 1
+        limit
     )
     .fetch_all(executor)
     .await?;
@@ -1387,258 +1406,160 @@ where
         .collect())
 }
 
-/// Groups candidates, in the given order, so no group carries more than `budget` dependent
-/// rows. A candidate that does not fit next to the others starts a new group, and a candidate
-/// over the budget on its own still forms a group, so every call makes progress.
-fn group_by_row_budget<T: Copy>(items: &[(T, DependentRowCounts)], budget: i64) -> Vec<Vec<T>> {
-    let mut groups: Vec<Vec<T>> = Vec::new();
-    let mut current: Vec<T> = Vec::new();
-    let mut used = 0i64;
-    for (item, counts) in items {
-        let rows = counts.total();
-        if !current.is_empty() && used + rows > budget {
-            groups.push(std::mem::take(&mut current));
-            used = 0;
-        }
-        current.push(*item);
-        used += rows;
-    }
-    if !current.is_empty() {
-        groups.push(current);
-    }
-    groups
+/// Decides, in id order, which candidates one call deletes whole. A person whose dependent rows
+/// fit the leftover budget is admitted, up to `max_persons`; the first that does not fit is kept
+/// for the trim step; every other candidate is pending. Small persons never wait behind a big one.
+#[derive(Debug)]
+struct Admission {
+    remaining: i64,
+    max_persons: usize,
+    admitted: Vec<(i64, Uuid)>,
+    trim: Option<(i64, Uuid)>,
+    pending: Vec<Uuid>,
 }
 
-/// One request chunk: resolve the still-tombstoned persons, size their dependent rows, and
-/// delete them in transactions that each stay under `max_rows_per_transaction` dependent rows.
-async fn delete_tombstoned_persons_chunk(
-    pool: &PgPool,
-    team_id: i64,
-    uuids: &[Uuid],
-    max_dependent_rows: i64,
-    max_rows_per_transaction: i64,
-    client: &str,
-) -> StorageResult<TombstonedDeleteOutcome> {
-    if uuids.is_empty() {
-        return Ok(TombstonedDeleteOutcome::default());
-    }
-
-    let chunk_labels = [
-        (
-            "operation".to_string(),
-            "delete_tombstoned_persons_chunk".to_string(),
-        ),
-        ("pool".to_string(), "bulk_primary".to_string()),
-        ("client".to_string(), client.to_string()),
-        ("method".to_string(), current_method_name().to_string()),
-    ];
-    let _chunk_timer = common_metrics::timing_guard(DB_QUERY_DURATION, &chunk_labels);
-
-    // Resolved without locks: each group re-checks the tombstone under its row lock, so a person
-    // revived in between drops out of its group and reads as neither deleted nor live.
-    let candidates: Vec<(i64, Uuid)> = sqlx::query!(
-        r#"
-        SELECT id::bigint AS "id!", uuid AS "uuid!"
-        FROM posthog_person
-        WHERE team_id = $1 AND uuid = ANY($2) AND is_deleted
-        ORDER BY id
-        "#,
-        team_id as i32,
-        uuids
-    )
-    .fetch_all(pool)
-    .await?
-    .into_iter()
-    .map(|row| (row.id, row.uuid))
-    .collect();
-
-    let skipped_live: i64 = sqlx::query_scalar!(
-        r#"
-        SELECT count(*) AS "count!"
-        FROM posthog_person
-        WHERE team_id = $1 AND uuid = ANY($2) AND is_deleted = false
-        "#,
-        team_id as i32,
-        uuids
-    )
-    .fetch_one(pool)
-    .await?;
-
-    if candidates.is_empty() {
-        return Ok(TombstonedDeleteOutcome {
-            skipped_live,
-            ..TombstonedDeleteOutcome::default()
-        });
-    }
-
-    // A person over the cap in any table would hold row locks and write WAL far past the
-    // caller's deadline, so it is reported back for TrimTombstonedPerson instead.
-    let ids: Vec<i64> = candidates.iter().map(|(id, _)| *id).collect();
-    let counts = probe_dependent_rows(pool, team_id, &ids, max_dependent_rows).await?;
-    let mut oversized_uuids = Vec::new();
-    let mut sized: Vec<(Uuid, DependentRowCounts)> = Vec::new();
-    for (id, uuid) in &candidates {
-        let person_counts = counts.get(id).copied().unwrap_or_default();
-        if person_counts.over_cap(max_dependent_rows) {
-            oversized_uuids.push(*uuid);
-        } else {
-            sized.push((*uuid, person_counts));
+impl Admission {
+    fn new(budget: i64, max_persons: usize) -> Self {
+        Self {
+            remaining: budget,
+            max_persons,
+            admitted: Vec::new(),
+            trim: None,
+            pending: Vec::new(),
         }
     }
 
-    let groups = group_by_row_budget(&sized, max_rows_per_transaction);
-    common_metrics::histogram(
-        DB_BULK_CHUNKS,
-        &[(
-            "operation".to_string(),
-            "delete_tombstoned_persons_transactions".to_string(),
-        )],
-        groups.len() as f64,
-    );
-
-    let mut outcome = TombstonedDeleteOutcome {
-        skipped_live,
-        oversized_uuids,
-        ..TombstonedDeleteOutcome::default()
-    };
-    for group in groups {
-        let group_outcome = delete_tombstoned_group(pool, team_id, &group, client).await?;
-        outcome.deleted += group_outcome.deleted;
-        outcome.blocked_uuids.extend(group_outcome.blocked_uuids);
+    fn wants_more(&self) -> bool {
+        self.admitted.len() < self.max_persons
     }
 
-    for (operation, value) in [
-        (
-            "delete_tombstoned_persons_blocked",
-            outcome.blocked_uuids.len(),
-        ),
-        (
-            "delete_tombstoned_persons_oversized",
-            outcome.oversized_uuids.len(),
-        ),
-        (
-            "delete_tombstoned_persons_skipped_live",
-            skipped_live as usize,
-        ),
-    ] {
-        common_metrics::histogram(
-            DB_ROWS_RETURNED,
-            &[
-                ("operation".to_string(), operation.to_string()),
-                ("pool".to_string(), "bulk_primary".to_string()),
-                ("client".to_string(), client.to_string()),
-                ("method".to_string(), current_method_name().to_string()),
-            ],
-            value as f64,
-        );
+    /// One more than the leftover, so a count at the limit reads as "does not fit".
+    fn probe_limit(&self) -> i64 {
+        self.remaining + 1
     }
 
-    Ok(outcome)
+    fn offer(&mut self, id: i64, uuid: Uuid, counts: DependentRowCounts) {
+        let total = counts.total();
+        if self.wants_more() && total <= self.remaining {
+            self.remaining -= total;
+            self.admitted.push((id, uuid));
+            return;
+        }
+        if self.trim.is_none() && total > self.remaining {
+            self.trim = Some((id, uuid));
+        }
+        self.pending.push(uuid);
+    }
+
+    fn defer(&mut self, uuids: impl IntoIterator<Item = Uuid>) {
+        self.pending.extend(uuids);
+    }
 }
 
-#[derive(Debug, Default)]
-struct GroupOutcome {
-    deleted: i64,
-    blocked_uuids: Vec<Uuid>,
-}
-
-/// One tombstone-guarded transaction, locking persons then their distinct ids in id order. Live
-/// writers touch live persons, never locked here, and the identity saga locks in this order.
-async fn delete_tombstoned_group(
-    pool: &PgPool,
+/// Deletes up to `budget` dependent rows of a person the caller holds locked: distinct ids
+/// first, then hash key overrides, then cohort memberships. Returns the rows deleted, or `None`
+/// when a live distinct id was found, in which case nothing of this person is deleted.
+async fn trim_locked_person(
+    tx: &mut Transaction<'_, Postgres>,
     team_id: i64,
-    uuids: &[Uuid],
-    client: &str,
-) -> StorageResult<GroupOutcome> {
-    let mut tx = pool.begin().await?;
-
-    // A held row means a revival or merge in flight: fail fast and let the caller retry. Kept
-    // under the router's 5 s backend deadline so the caller sees an error, not a timeout.
-    sqlx::query("SET LOCAL lock_timeout = '2s'")
-        .execute(&mut *tx)
-        .await?;
-
-    // Lock only the persons that are still tombstoned. READ COMMITTED re-checks is_deleted on
-    // the row version that wins the lock, so a person revived a moment ago drops out here.
-    let candidates: Vec<(i64, Uuid)> = sqlx::query!(
+    person_id: i64,
+    budget: i64,
+) -> StorageResult<Option<i64>> {
+    // No is_deleted filter: the scan then visits at most `budget` index entries, and a live
+    // mapping among them means ingestion can still reach the person.
+    let mappings = sqlx::query!(
         r#"
-        SELECT id::bigint AS "id!", uuid AS "uuid!"
-        FROM posthog_person
-        WHERE team_id = $1 AND uuid = ANY($2) AND is_deleted
-        ORDER BY id
-        FOR UPDATE
-        "#,
-        team_id as i32,
-        uuids
-    )
-    .fetch_all(&mut *tx)
-    .await?
-    .into_iter()
-    .map(|row| (row.id, row.uuid))
-    .collect();
-
-    if candidates.is_empty() {
-        tx.commit().await?;
-        return Ok(GroupOutcome::default());
-    }
-    let candidate_ids: Vec<i64> = candidates.iter().map(|(id, _)| *id).collect();
-
-    // Lock the distinct ids too and read their state under the lock. A live mapping means
-    // ingestion can still reach the person, so it must stay.
-    let live_owners: HashSet<i64> = sqlx::query!(
-        r#"
-        SELECT person_id AS "person_id!", is_deleted AS "is_deleted!"
+        SELECT id::bigint AS "id!", is_deleted AS "is_deleted!"
         FROM posthog_persondistinctid
-        WHERE team_id = $1 AND person_id = ANY($2)
-        ORDER BY id
+        WHERE team_id = $1 AND person_id = $2
+        LIMIT $3
         FOR UPDATE
         "#,
         team_id as i32,
-        candidate_ids.as_slice()
+        person_id,
+        budget
     )
-    .fetch_all(&mut *tx)
-    .await?
-    .into_iter()
-    .filter(|row| !row.is_deleted)
-    .map(|row| row.person_id)
-    .collect();
-
-    let blocked_uuids: Vec<Uuid> = candidates
-        .iter()
-        .filter(|(id, _)| live_owners.contains(id))
-        .map(|(_, uuid)| *uuid)
-        .collect();
-    let victims: Vec<i64> = candidates
-        .iter()
-        .filter(|(id, _)| !live_owners.contains(id))
-        .map(|(id, _)| *id)
-        .collect();
-
-    // The hash key override FK cascades in production but not in every environment built from
-    // the sqlx migrations, so remove the overrides here instead of relying on the cascade.
-    if !victims.is_empty() {
-        sqlx::query!(
-            "DELETE FROM posthog_featureflaghashkeyoverride WHERE team_id = $1 AND person_id = ANY($2)",
-            team_id as i32,
-            victims.as_slice()
-        )
-        .execute(&mut *tx)
-        .await?;
+    .fetch_all(&mut **tx)
+    .await?;
+    if mappings.iter().any(|row| !row.is_deleted) {
+        return Ok(None);
     }
 
-    let deleted = delete_persons_by_ids_in_tx(&mut tx, team_id, &victims, client, true).await?;
+    let mut remaining = budget;
+    let mut deleted = 0i64;
+    if !mappings.is_empty() {
+        let ids: Vec<i64> = mappings.iter().map(|row| row.id).collect();
+        let n = sqlx::query!(
+            "DELETE FROM posthog_persondistinctid WHERE team_id = $1 AND id = ANY($2)",
+            team_id as i32,
+            ids.as_slice()
+        )
+        .execute(&mut **tx)
+        .await?
+        .rows_affected() as i64;
+        deleted += n;
+        remaining -= n;
+    }
 
-    tx.commit().await?;
+    if remaining > 0 {
+        let ids: Vec<i64> = sqlx::query_scalar!(
+            r#"
+            SELECT id::bigint AS "id!"
+            FROM posthog_featureflaghashkeyoverride
+            WHERE team_id = $1 AND person_id = $2
+            LIMIT $3
+            "#,
+            team_id as i32,
+            person_id,
+            remaining
+        )
+        .fetch_all(&mut **tx)
+        .await?;
+        if !ids.is_empty() {
+            let n = sqlx::query!(
+                "DELETE FROM posthog_featureflaghashkeyoverride WHERE team_id = $1 AND id = ANY($2::bigint[])",
+                team_id as i32,
+                ids.as_slice()
+            )
+            .execute(&mut **tx)
+            .await?
+            .rows_affected() as i64;
+            deleted += n;
+            remaining -= n;
+        }
+    }
 
-    Ok(GroupOutcome {
-        deleted,
-        blocked_uuids,
-    })
+    if remaining > 0 {
+        let ids: Vec<i64> = sqlx::query_scalar!(
+            r#"
+            SELECT id::bigint AS "id!"
+            FROM posthog_cohortpeople
+            WHERE person_id = $1
+            LIMIT $2
+            "#,
+            person_id,
+            remaining
+        )
+        .fetch_all(&mut **tx)
+        .await?;
+        if !ids.is_empty() {
+            deleted += sqlx::query!(
+                "DELETE FROM posthog_cohortpeople WHERE id = ANY($1)",
+                ids.as_slice()
+            )
+            .execute(&mut **tx)
+            .await?
+            .rows_affected() as i64;
+        }
+    }
+
+    Ok(Some(deleted))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{group_by_row_budget, DependentRowCounts};
+    use super::{Admission, DependentRowCounts};
+    use uuid::Uuid;
 
     fn counts(
         distinct_ids: i64,
@@ -1652,37 +1573,63 @@ mod tests {
         }
     }
 
+    fn offer_all(admission: &mut Admission, persons: &[(i64, DependentRowCounts)]) -> Vec<Uuid> {
+        let uuids: Vec<Uuid> = persons.iter().map(|_| Uuid::new_v4()).collect();
+        for ((id, c), uuid) in persons.iter().zip(&uuids) {
+            admission.offer(*id, *uuid, *c);
+        }
+        uuids
+    }
+
     #[test]
-    fn groups_stay_under_the_budget_and_keep_order() {
-        let items = [
-            ("a", counts(2, 1, 0)),
-            ("b", counts(3, 0, 0)),
-            ("c", counts(0, 0, 4)),
-            ("d", counts(1, 1, 1)),
-            ("e", counts(0, 0, 0)),
+    fn admits_what_fits_and_keeps_the_first_misfit_for_the_trim() {
+        let mut admission = Admission::new(6, 100);
+        let persons = [
+            (1, counts(2, 1, 0)), // fits, 3 left
+            (2, counts(4, 0, 0)), // misfit: the trim candidate
+            (3, counts(0, 0, 3)), // fits exactly, 0 left
+            (4, counts(5, 0, 0)), // misfit, but the trim slot is taken
+            (5, counts(0, 0, 0)), // still fits with nothing left
         ];
+        let uuids = offer_all(&mut admission, &persons);
 
         assert_eq!(
-            group_by_row_budget(&items, 6),
-            vec![vec!["a", "b"], vec!["c"], vec!["d", "e"]]
+            admission.admitted,
+            vec![(1, uuids[0]), (3, uuids[2]), (5, uuids[4])]
         );
+        assert_eq!(admission.trim, Some((2, uuids[1])));
+        assert_eq!(admission.pending, vec![uuids[1], uuids[3]]);
+        assert_eq!(admission.remaining, 0);
+        assert_eq!(admission.probe_limit(), 1);
     }
 
     #[test]
-    fn a_candidate_over_the_budget_still_gets_its_own_group() {
-        let items = [("big", counts(9, 0, 0)), ("small", counts(1, 0, 0))];
+    fn the_person_cap_defers_the_rest_without_choosing_a_trim() {
+        let mut admission = Admission::new(10, 2);
+        let persons = [
+            (1, counts(0, 0, 0)),
+            (2, counts(1, 0, 0)),
+            (3, counts(0, 0, 0)),
+        ];
+        let uuids = offer_all(&mut admission, &persons);
+        assert!(!admission.wants_more());
+        let deferred = Uuid::new_v4();
+        admission.defer([deferred]);
 
-        assert_eq!(
-            group_by_row_budget(&items, 5),
-            vec![vec!["big"], vec!["small"]]
-        );
+        assert_eq!(admission.admitted, vec![(1, uuids[0]), (2, uuids[1])]);
+        assert_eq!(admission.trim, None);
+        assert_eq!(admission.pending, vec![uuids[2], deferred]);
+        assert_eq!(admission.remaining, 9);
     }
 
     #[test]
-    fn over_cap_checks_each_table_on_its_own() {
-        assert!(counts(4, 0, 0).over_cap(3));
-        assert!(counts(0, 4, 0).over_cap(3));
-        assert!(counts(0, 0, 4).over_cap(3));
-        assert!(!counts(3, 3, 3).over_cap(3));
+    fn a_misfit_over_the_cap_is_still_the_trim_candidate() {
+        let mut admission = Admission::new(3, 1);
+        let persons = [(1, counts(0, 0, 0)), (2, counts(4, 0, 0))];
+        let uuids = offer_all(&mut admission, &persons);
+
+        assert_eq!(admission.admitted, vec![(1, uuids[0])]);
+        assert_eq!(admission.trim, Some((2, uuids[1])));
+        assert_eq!(admission.pending, vec![uuids[1]]);
     }
 }

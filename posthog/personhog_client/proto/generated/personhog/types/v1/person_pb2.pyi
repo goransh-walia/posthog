@@ -424,72 +424,41 @@ class DeletePersonsBatchForTeamResponse(_message.Message):
     def __init__(self, deleted_count: _Optional[int] = ...) -> None: ...
 
 class DeleteTombstonedPersonsRequest(_message.Message):
-    __slots__ = ("team_id", "person_uuids")
+    __slots__ = ("team_id", "person_uuids", "max_rows")
     TEAM_ID_FIELD_NUMBER: _ClassVar[int]
     PERSON_UUIDS_FIELD_NUMBER: _ClassVar[int]
+    MAX_ROWS_FIELD_NUMBER: _ClassVar[int]
     team_id: int
     person_uuids: _containers.RepeatedScalarFieldContainer[str]
+    max_rows: int
 
-    def __init__(self, team_id: _Optional[int] = ..., person_uuids: _Optional[_Iterable[str]] = ...) -> None: ...
+    def __init__(
+        self,
+        team_id: _Optional[int] = ...,
+        person_uuids: _Optional[_Iterable[str]] = ...,
+        max_rows: _Optional[int] = ...,
+    ) -> None: ...
 
 class DeleteTombstonedPersonsResponse(_message.Message):
-    __slots__ = ("deleted_count", "skipped_live_count", "blocked_person_uuids", "oversized_person_uuids")
+    __slots__ = ("deleted_count", "skipped_live_count", "blocked_person_uuids", "pending_person_uuids", "rows_deleted")
     DELETED_COUNT_FIELD_NUMBER: _ClassVar[int]
     SKIPPED_LIVE_COUNT_FIELD_NUMBER: _ClassVar[int]
     BLOCKED_PERSON_UUIDS_FIELD_NUMBER: _ClassVar[int]
-    OVERSIZED_PERSON_UUIDS_FIELD_NUMBER: _ClassVar[int]
+    PENDING_PERSON_UUIDS_FIELD_NUMBER: _ClassVar[int]
+    ROWS_DELETED_FIELD_NUMBER: _ClassVar[int]
     deleted_count: int
     skipped_live_count: int
     blocked_person_uuids: _containers.RepeatedScalarFieldContainer[str]
-    oversized_person_uuids: _containers.RepeatedScalarFieldContainer[str]
+    pending_person_uuids: _containers.RepeatedScalarFieldContainer[str]
+    rows_deleted: int
 
     def __init__(
         self,
         deleted_count: _Optional[int] = ...,
         skipped_live_count: _Optional[int] = ...,
         blocked_person_uuids: _Optional[_Iterable[str]] = ...,
-        oversized_person_uuids: _Optional[_Iterable[str]] = ...,
-    ) -> None: ...
-
-class TrimTombstonedPersonRequest(_message.Message):
-    __slots__ = ("team_id", "person_uuid", "max_rows")
-    TEAM_ID_FIELD_NUMBER: _ClassVar[int]
-    PERSON_UUID_FIELD_NUMBER: _ClassVar[int]
-    MAX_ROWS_FIELD_NUMBER: _ClassVar[int]
-    team_id: int
-    person_uuid: str
-    max_rows: int
-
-    def __init__(
-        self, team_id: _Optional[int] = ..., person_uuid: _Optional[str] = ..., max_rows: _Optional[int] = ...
-    ) -> None: ...
-
-class TrimTombstonedPersonResponse(_message.Message):
-    __slots__ = (
-        "person_tombstoned",
-        "distinct_ids_deleted",
-        "hash_key_overrides_deleted",
-        "cohort_memberships_deleted",
-        "over_cap",
-    )
-    PERSON_TOMBSTONED_FIELD_NUMBER: _ClassVar[int]
-    DISTINCT_IDS_DELETED_FIELD_NUMBER: _ClassVar[int]
-    HASH_KEY_OVERRIDES_DELETED_FIELD_NUMBER: _ClassVar[int]
-    COHORT_MEMBERSHIPS_DELETED_FIELD_NUMBER: _ClassVar[int]
-    OVER_CAP_FIELD_NUMBER: _ClassVar[int]
-    person_tombstoned: bool
-    distinct_ids_deleted: int
-    hash_key_overrides_deleted: int
-    cohort_memberships_deleted: int
-    over_cap: bool
-
-    def __init__(
-        self,
-        person_tombstoned: bool = ...,
-        distinct_ids_deleted: _Optional[int] = ...,
-        hash_key_overrides_deleted: _Optional[int] = ...,
-        cohort_memberships_deleted: _Optional[int] = ...,
-        over_cap: bool = ...,
+        pending_person_uuids: _Optional[_Iterable[str]] = ...,
+        rows_deleted: _Optional[int] = ...,
     ) -> None: ...
 
 class SplitPersonRequest(_message.Message):

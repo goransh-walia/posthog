@@ -40,8 +40,7 @@ use personhog_proto::personhog::types::v1::{
     PersonsResponse, SetPersonDistinctIdVersionFloorRequest,
     SetPersonDistinctIdVersionFloorResponse, SetPersonVersionFloorRequest,
     SetPersonVersionFloorResponse, SplitPersonRequest, SplitPersonResponse,
-    SplitResult as ProtoSplitResult, TeamDistinctId, TrimTombstonedPersonRequest,
-    TrimTombstonedPersonResponse, UpdateGroupRequest, UpdateGroupResponse,
+    SplitResult as ProtoSplitResult, TeamDistinctId, UpdateGroupRequest, UpdateGroupResponse,
     UpdateGroupTypeMappingRequest, UpdateGroupTypeMappingResponse, UpsertHashKeyOverridesRequest,
     UpsertHashKeyOverridesResponse,
 };
@@ -65,8 +64,8 @@ use field_mask::{
     person_needs_properties,
 };
 
-/// Rows one TrimTombstonedPerson call deletes when the request leaves max_rows at 0.
-const TRIM_DEFAULT_ROWS: i64 = 5000;
+/// Dependent rows one DeleteTombstonedPersons call deletes when the request leaves max_rows at 0.
+const DELETE_TOMBSTONED_DEFAULT_ROWS: i64 = 1000;
 
 pub struct PersonHogReplicaService {
     storage: Arc<dyn FullStorage>,
@@ -454,10 +453,18 @@ impl PersonHogReplica for PersonHogReplicaService {
             .map(|s| Uuid::parse_str(s))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| Status::invalid_argument(format!("Invalid UUID: {e}")))?;
+        if req.max_rows < 0 {
+            return Err(Status::invalid_argument("max_rows must not be negative"));
+        }
+        let max_rows = if req.max_rows == 0 {
+            DELETE_TOMBSTONED_DEFAULT_ROWS
+        } else {
+            req.max_rows
+        };
 
         let outcome = self
             .storage
-            .delete_tombstoned_persons(req.team_id, &uuids)
+            .delete_tombstoned_persons(req.team_id, &uuids, max_rows)
             .await
             .map_err(|e| log_and_convert_error(e, "delete_tombstoned_persons"))?;
 
@@ -469,42 +476,12 @@ impl PersonHogReplica for PersonHogReplicaService {
                 .iter()
                 .map(ToString::to_string)
                 .collect(),
-            oversized_person_uuids: outcome
-                .oversized_uuids
+            pending_person_uuids: outcome
+                .pending_uuids
                 .iter()
                 .map(ToString::to_string)
                 .collect(),
-        }))
-    }
-
-    async fn trim_tombstoned_person(
-        &self,
-        request: Request<TrimTombstonedPersonRequest>,
-    ) -> Result<Response<TrimTombstonedPersonResponse>, Status> {
-        let req = request.into_inner();
-        let uuid = Uuid::parse_str(&req.person_uuid)
-            .map_err(|e| Status::invalid_argument(format!("Invalid UUID: {e}")))?;
-        if req.max_rows < 0 {
-            return Err(Status::invalid_argument("max_rows must not be negative"));
-        }
-        let max_rows = if req.max_rows == 0 {
-            TRIM_DEFAULT_ROWS
-        } else {
-            req.max_rows
-        };
-
-        let outcome = self
-            .storage
-            .trim_tombstoned_person(req.team_id, uuid, max_rows)
-            .await
-            .map_err(|e| log_and_convert_error(e, "trim_tombstoned_person"))?;
-
-        Ok(Response::new(TrimTombstonedPersonResponse {
-            person_tombstoned: outcome.person_tombstoned,
-            distinct_ids_deleted: outcome.distinct_ids_deleted,
-            hash_key_overrides_deleted: outcome.hash_key_overrides_deleted,
-            cohort_memberships_deleted: outcome.cohort_memberships_deleted,
-            over_cap: outcome.over_cap,
+            rows_deleted: outcome.rows_deleted,
         }))
     }
 

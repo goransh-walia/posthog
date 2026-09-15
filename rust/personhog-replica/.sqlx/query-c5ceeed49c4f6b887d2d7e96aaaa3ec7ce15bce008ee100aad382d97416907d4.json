@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT id::bigint AS \"id!\"\n                FROM posthog_cohortpeople\n                WHERE person_id = $1\n                LIMIT $2\n                ",
+  "query": "\n            SELECT id::bigint AS \"id!\"\n            FROM posthog_cohortpeople\n            WHERE person_id = $1\n            LIMIT $2\n            ",
   "describe": {
     "columns": [
       {
@@ -19,5 +19,5 @@
       false
     ]
   },
-  "hash": "0dc37fb41e1508494789e55dd7ef99a118f33a51ebe7fd882f8ebf70ec31ca38"
+  "hash": "c5ceeed49c4f6b887d2d7e96aaaa3ec7ce15bce008ee100aad382d97416907d4"
 }

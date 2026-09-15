@@ -15,33 +15,21 @@ pub struct DistinctIdWithVersion {
     pub version: Option<i64>,
 }
 
-/// Outcome of a tombstone-guarded delete. Every requested uuid lands in at most one bucket;
-/// a uuid with no Postgres row lands in none.
+/// Outcome of one bounded DeleteTombstonedPersons call. Every requested uuid lands in at most
+/// one bucket; a uuid with no Postgres row, or whose person is live again, lands in none.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TombstonedDeleteOutcome {
-    /// Persons hard-deleted together with their distinct ids and cohort memberships.
+    /// Persons hard-deleted together with their dependent rows.
     pub deleted: i64,
     /// Persons found with is_deleted = false, so revived after the caller queued them. Untouched.
     pub skipped_live: i64,
     /// Persons still tombstoned but referenced by a live distinct id. Untouched. Ingestion never
     /// produces this state, so the caller should surface it rather than retry blindly.
     pub blocked_uuids: Vec<Uuid>,
-    /// Persons still tombstoned but owning more rows in a dependent table than one transaction
-    /// may delete. Untouched; TrimTombstonedPerson takes them down first.
-    pub oversized_uuids: Vec<Uuid>,
-}
-
-/// One bounded trim of a tombstoned person's dependent rows.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct TrimOutcome {
-    /// False when the person is live or missing. Nothing was deleted then.
-    pub person_tombstoned: bool,
-    pub distinct_ids_deleted: i64,
-    pub hash_key_overrides_deleted: i64,
-    pub cohort_memberships_deleted: i64,
-    /// A dependent table still holds more rows than the cap. With nothing deleted in this call,
-    /// the remaining rows are live distinct ids and the person is blocked, not oversized.
-    pub over_cap: bool,
+    /// Persons not finished within the row budget; the caller sends them again.
+    pub pending_uuids: Vec<Uuid>,
+    /// Dependent rows deleted by this call.
+    pub rows_deleted: i64,
 }
 
 #[derive(Debug, Clone)]

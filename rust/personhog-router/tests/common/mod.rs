@@ -49,8 +49,7 @@ use personhog_proto::personhog::types::v1::{
     PersonsByDistinctIdsInTeamResponse, PersonsByDistinctIdsResponse, PersonsResponse,
     SetPersonDistinctIdVersionFloorRequest, SetPersonDistinctIdVersionFloorResponse,
     SetPersonVersionFloorRequest, SetPersonVersionFloorResponse, SplitPersonRequest,
-    SplitPersonResponse, TrimTombstonedPersonRequest, TrimTombstonedPersonResponse,
-    UpdateGroupRequest, UpdateGroupResponse, UpdateGroupTypeMappingRequest,
+    SplitPersonResponse, UpdateGroupRequest, UpdateGroupResponse, UpdateGroupTypeMappingRequest,
     UpdateGroupTypeMappingResponse, UpdatePersonPropertiesRequest, UpdatePersonPropertiesResponse,
     UpsertHashKeyOverridesRequest, UpsertHashKeyOverridesResponse,
 };
@@ -461,13 +460,6 @@ impl PersonHogReplica for TestReplicaService {
         _request: Request<DeleteTombstonedPersonsRequest>,
     ) -> Result<Response<DeleteTombstonedPersonsResponse>, Status> {
         Ok(Response::new(DeleteTombstonedPersonsResponse::default()))
-    }
-
-    async fn trim_tombstoned_person(
-        &self,
-        _request: Request<TrimTombstonedPersonRequest>,
-    ) -> Result<Response<TrimTombstonedPersonResponse>, Status> {
-        Ok(Response::new(TrimTombstonedPersonResponse::default()))
     }
 
     async fn split_person(

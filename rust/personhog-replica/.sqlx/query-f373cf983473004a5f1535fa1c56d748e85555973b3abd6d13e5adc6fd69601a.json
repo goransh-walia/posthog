@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT person_id AS \"person_id!\", is_deleted AS \"is_deleted!\"\n        FROM posthog_persondistinctid\n        WHERE team_id = $1 AND person_id = ANY($2)\n        ORDER BY id\n        FOR UPDATE\n        ",
+  "query": "\n                SELECT person_id AS \"person_id!\", is_deleted AS \"is_deleted!\"\n                FROM posthog_persondistinctid\n                WHERE team_id = $1 AND person_id = ANY($2)\n                ORDER BY id\n                FOR UPDATE\n                ",
   "describe": {
     "columns": [
       {
@@ -25,5 +25,5 @@
       false
     ]
   },
-  "hash": "4b492179a242688e21eaa71d667a03b2436414a1388271a479cc6df03f174823"
+  "hash": "f373cf983473004a5f1535fa1c56d748e85555973b3abd6d13e5adc6fd69601a"
 }

@@ -41,18 +41,7 @@ pub struct PostgresStorage {
     pub bulk_replica_pool: PgPool,
     pub(crate) bulk_chunk_size: usize,
     pub(crate) bulk_max_concurrent_chunks: usize,
-    pub(crate) tombstoned_limits: TombstonedDeleteLimits,
-}
-
-/// Row bounds for DeleteTombstonedPersons and TrimTombstonedPerson.
-#[derive(Debug, Clone, Copy)]
-pub struct TombstonedDeleteLimits {
-    /// Rows a person may own in any one dependent table before it is reported as oversized.
-    pub max_dependent_rows: usize,
-    /// Dependent rows one batch delete transaction may carry. At least three times the cap.
-    pub max_rows_per_transaction: usize,
-    /// Dependent rows one trim step may delete; the request's max_rows is clamped to it.
-    pub trim_max_rows: usize,
+    pub(crate) tombstoned_delete_max_rows: usize,
 }
 
 impl PostgresStorage {
@@ -64,7 +53,7 @@ impl PostgresStorage {
         bulk_replica_pool: PgPool,
         bulk_chunk_size: usize,
         bulk_max_concurrent_chunks: usize,
-        tombstoned_limits: TombstonedDeleteLimits,
+        tombstoned_delete_max_rows: usize,
     ) -> Self {
         Self {
             primary_pool,
@@ -73,7 +62,7 @@ impl PostgresStorage {
             bulk_replica_pool,
             bulk_chunk_size,
             bulk_max_concurrent_chunks,
-            tombstoned_limits,
+            tombstoned_delete_max_rows,
         }
     }
 

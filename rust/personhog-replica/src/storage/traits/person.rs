@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::storage::error::StorageResult;
-use crate::storage::types::{Person, SplitResult, TombstonedDeleteOutcome, TrimOutcome};
+use crate::storage::types::{Person, SplitResult, TombstonedDeleteOutcome};
 
 /// Person lookup operations by ID, UUID, and distinct ID
 #[async_trait]
@@ -58,24 +58,16 @@ pub trait PersonLookup: Send + Sync {
     /// deleting already-removed UUIDs is a no-op.
     async fn delete_persons(&self, team_id: i64, uuids: &[Uuid]) -> StorageResult<i64>;
 
-    /// Hard-delete persons that are still tombstoned under the row locks the delete holds, so a
-    /// concurrent revival is either skipped or lands afterwards on a fresh row. Skips persons
-    /// that are live again or still own a live distinct id; idempotent.
+    /// Delete persons that are still tombstoned, at most `max_rows` dependent rows per call:
+    /// persons that fit the budget go whole, the first that does not is trimmed with the leftover
+    /// and returned pending, the rest are returned pending untouched. A revival either wins the
+    /// row lock first and is skipped, or lands afterwards on a fresh row. Idempotent.
     async fn delete_tombstoned_persons(
         &self,
         team_id: i64,
         uuids: &[Uuid],
-    ) -> StorageResult<TombstonedDeleteOutcome>;
-
-    /// Delete up to `max_rows` dependent rows of one tombstoned person in one short transaction
-    /// under the person's row lock: tombstoned distinct ids, then hash key overrides, then cohort
-    /// memberships. A live or missing person is left untouched. Idempotent.
-    async fn trim_tombstoned_person(
-        &self,
-        team_id: i64,
-        uuid: Uuid,
         max_rows: i64,
-    ) -> StorageResult<TrimOutcome>;
+    ) -> StorageResult<TombstonedDeleteOutcome>;
 
     /// Delete up to `batch_size` persons for a team. Selects person IDs with
     /// FOR UPDATE SKIP LOCKED, then splits them into fixed-size chunks and

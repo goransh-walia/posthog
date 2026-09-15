@@ -99,16 +99,8 @@ impl storage::PersonLookup for FailingStorage {
         &self,
         _team_id: i64,
         _uuids: &[Uuid],
-    ) -> storage::StorageResult<storage::TombstonedDeleteOutcome> {
-        Err(self.error.clone())
-    }
-
-    async fn trim_tombstoned_person(
-        &self,
-        _team_id: i64,
-        _uuid: Uuid,
         _max_rows: i64,
-    ) -> storage::StorageResult<storage::TrimOutcome> {
+    ) -> storage::StorageResult<storage::TombstonedDeleteOutcome> {
         Err(self.error.clone())
     }
 
@@ -490,17 +482,9 @@ impl storage::PersonLookup for SuccessStorage {
         &self,
         _team_id: i64,
         _uuids: &[Uuid],
+        _max_rows: i64,
     ) -> storage::StorageResult<storage::TombstonedDeleteOutcome> {
         Ok(storage::TombstonedDeleteOutcome::default())
-    }
-
-    async fn trim_tombstoned_person(
-        &self,
-        _team_id: i64,
-        _uuid: Uuid,
-        _max_rows: i64,
-    ) -> storage::StorageResult<storage::TrimOutcome> {
-        Ok(storage::TrimOutcome::default())
     }
 
     async fn delete_persons_batch_for_team(
@@ -940,17 +924,9 @@ impl storage::PersonLookup for PopulatedStorage {
         &self,
         _team_id: i64,
         _uuids: &[Uuid],
+        _max_rows: i64,
     ) -> storage::StorageResult<storage::TombstonedDeleteOutcome> {
         Ok(storage::TombstonedDeleteOutcome::default())
-    }
-
-    async fn trim_tombstoned_person(
-        &self,
-        _team_id: i64,
-        _uuid: Uuid,
-        _max_rows: i64,
-    ) -> storage::StorageResult<storage::TrimOutcome> {
-        Ok(storage::TrimOutcome::default())
     }
 
     async fn delete_persons_batch_for_team(
@@ -1366,17 +1342,9 @@ impl storage::PersonLookup for ConsistencyTrackingStorage {
         &self,
         _team_id: i64,
         _uuids: &[Uuid],
+        _max_rows: i64,
     ) -> storage::StorageResult<storage::TombstonedDeleteOutcome> {
         Ok(storage::TombstonedDeleteOutcome::default())
-    }
-
-    async fn trim_tombstoned_person(
-        &self,
-        _team_id: i64,
-        _uuid: Uuid,
-        _max_rows: i64,
-    ) -> storage::StorageResult<storage::TrimOutcome> {
-        Ok(storage::TrimOutcome::default())
     }
 
     async fn delete_persons_batch_for_team(

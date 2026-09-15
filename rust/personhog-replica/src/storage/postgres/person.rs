@@ -1434,9 +1434,8 @@ async fn delete_tombstoned_persons_chunk(
     ];
     let _chunk_timer = common_metrics::timing_guard(DB_QUERY_DURATION, &chunk_labels);
 
-    // Resolved without locks. Each group re-checks the tombstone under its row lock, so a
-    // person revived between here and there drops out of its group; the caller sees it as
-    // neither deleted nor live and the sweep queues it again if it is ever tombstoned again.
+    // Resolved without locks: each group re-checks the tombstone under its row lock, so a person
+    // revived in between drops out of its group and reads as neither deleted nor live.
     let candidates: Vec<(i64, Uuid)> = sqlx::query!(
         r#"
         SELECT id::bigint AS "id!", uuid AS "uuid!"
@@ -1543,10 +1542,8 @@ struct GroupOutcome {
     blocked_uuids: Vec<Uuid>,
 }
 
-/// One tombstone-guarded transaction. Row locks are taken in id order, persons first and then
-/// their distinct ids. Live-traffic writers work on live persons, which are never locked here,
-/// and the identity saga locks in this same order; any wait that appears anyway ends at
-/// lock_timeout as a retryable error.
+/// One tombstone-guarded transaction, locking persons then their distinct ids in id order. Live
+/// writers touch live persons, never locked here, and the identity saga locks in this order.
 async fn delete_tombstoned_group(
     pool: &PgPool,
     team_id: i64,
@@ -1555,8 +1552,7 @@ async fn delete_tombstoned_group(
 ) -> StorageResult<GroupOutcome> {
     let mut tx = pool.begin().await?;
 
-    // A writer holding one of these rows is mid-revival or mid-merge. Wait briefly, then hand
-    // the whole chunk back to the caller to retry instead of queueing behind live traffic. Kept
+    // A held row means a revival or merge in flight: fail fast and let the caller retry. Kept
     // under the router's 5 s backend deadline so the caller sees an error, not a timeout.
     sqlx::query("SET LOCAL lock_timeout = '2s'")
         .execute(&mut *tx)

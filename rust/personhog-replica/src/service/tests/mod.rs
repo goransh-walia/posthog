@@ -262,21 +262,28 @@ async fn test_trim_tombstoned_person_storage_error(
     assert_eq!(result.unwrap_err().code(), expected_code);
 }
 
+#[rstest]
+#[case::invalid_uuid("not-a-valid-uuid", 10, "Invalid UUID")]
+#[case::negative_max_rows("00000000-0000-0000-0000-000000000001", -1, "max_rows")]
 #[tokio::test]
-async fn test_trim_tombstoned_person_rejects_an_invalid_uuid() {
+async fn test_trim_tombstoned_person_invalid_input(
+    #[case] person_uuid: &str,
+    #[case] max_rows: i64,
+    #[case] expected_message: &str,
+) {
     let service = PersonHogReplicaService::new(Arc::new(mocks::SuccessStorage));
 
     let status = service
         .trim_tombstoned_person(Request::new(TrimTombstonedPersonRequest {
             team_id: 1,
-            person_uuid: "not-a-valid-uuid".to_string(),
-            max_rows: 10,
+            person_uuid: person_uuid.to_string(),
+            max_rows,
         }))
         .await
         .unwrap_err();
 
     assert_eq!(status.code(), tonic::Code::InvalidArgument);
-    assert!(status.message().contains("Invalid UUID"));
+    assert!(status.message().contains(expected_message));
 }
 
 // ============================================================

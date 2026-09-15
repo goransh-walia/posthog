@@ -61,17 +61,15 @@ pub struct Config {
     #[envconfig(default = "2")]
     pub bulk_max_concurrent_chunks: usize,
 
-    /// Maximum rows a tombstoned person may own in any one dependent table
-    /// (distinct ids, hash key overrides, cohort memberships) for
-    /// DeleteTombstonedPersons to delete it in a batch transaction. Persons
-    /// above the cap are reported as oversized, and TrimTombstonedPerson takes
-    /// them down in bounded steps.
+    /// Per-table cap (distinct ids, hash key overrides, cohort memberships) for
+    /// a tombstoned person to be deleted in a batch transaction. Persons above
+    /// it are reported as oversized for TrimTombstonedPerson.
     #[envconfig(default = "1000")]
     pub tombstoned_delete_max_dependent_rows: usize,
 
-    /// Maximum dependent rows one DeleteTombstonedPersons transaction deletes.
-    /// The persons of a request are grouped into transactions under this
-    /// budget. Must be at least three times the cap so any one person fits.
+    /// Dependent rows one DeleteTombstonedPersons transaction may delete; the
+    /// request is grouped into transactions under it. At least three times the
+    /// cap, so any one person fits.
     #[envconfig(default = "5000")]
     pub tombstoned_delete_max_rows_per_transaction: usize,
 

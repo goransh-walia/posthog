@@ -805,12 +805,10 @@ export const DeletePersonsBatchForTeamResponseSchema: GenMessage<DeletePersonsBa
 
 /**
  * DeleteTombstonedPersonsRequest hard-deletes persons only while they are still
- * tombstoned (is_deleted = true) at the moment of the delete. The check and the
- * delete run under the same row locks, so a revival that races the request is
- * never lost: it either wins the lock and the person is skipped, or it waits and
- * then creates a fresh person. Deletes posthog_persondistinctid,
- * posthog_cohortpeople and posthog_featureflaghashkeyoverride rows with the
- * person. Used by the person_pg_cleanup_queue drain. Idempotent.
+ * tombstoned, checking under the same row locks as the delete, so a racing
+ * revival is either skipped or lands afterwards on a fresh row. Deletes the
+ * person's distinct ids, cohort memberships and hash key overrides with it;
+ * idempotent.
  *
  * @generated from message personhog.types.v1.DeleteTombstonedPersonsRequest
  */
@@ -864,10 +862,9 @@ export type DeleteTombstonedPersonsResponse = Message<'personhog.types.v1.Delete
     blockedPersonUuids: string[]
 
     /**
-     * Persons still tombstoned but owning more rows in a dependent table (distinct
-     * ids, hash key overrides or cohort memberships) than one delete transaction may
-     * touch (replica setting TOMBSTONED_DELETE_MAX_DEPENDENT_ROWS). Nothing was
-     * deleted for them; trim them with TrimTombstonedPerson, then send them again.
+     * Persons still tombstoned but over the replica's per-table row cap
+     * (TOMBSTONED_DELETE_MAX_DEPENDENT_ROWS) in distinct ids, hash key overrides or
+     * cohort memberships. Untouched: trim them with TrimTombstonedPerson first.
      *
      * @generated from field: repeated string oversized_person_uuids = 4;
      */
@@ -884,10 +881,10 @@ export const DeleteTombstonedPersonsResponseSchema: GenMessage<DeleteTombstonedP
 
 /**
  * TrimTombstonedPersonRequest deletes up to max_rows dependent rows of one
- * tombstoned person in one short transaction under the person's row lock:
- * tombstoned distinct ids first, then hash key overrides, then cohort
- * memberships. Call it until over_cap is false, then DeleteTombstonedPersons
- * finishes the person. A live or missing person is left untouched. Idempotent.
+ * tombstoned person in one short transaction under its row lock: tombstoned
+ * distinct ids, then hash key overrides, then cohort memberships. Call it until
+ * over_cap is false, then finish with DeleteTombstonedPersons; a live or missing
+ * person is left untouched.
  *
  * @generated from message personhog.types.v1.TrimTombstonedPersonRequest
  */

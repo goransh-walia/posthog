@@ -58,12 +58,9 @@ pub trait PersonLookup: Send + Sync {
     /// deleting already-removed UUIDs is a no-op.
     async fn delete_persons(&self, team_id: i64, uuids: &[Uuid]) -> StorageResult<i64>;
 
-    /// Hard-delete persons that are still tombstoned when the delete runs. Per chunk, one
-    /// transaction locks the tombstoned person rows and their distinct-id rows in id order,
-    /// skips persons that are live again or still own a live distinct id, then deletes distinct
-    /// ids, cohort memberships and persons. The check and the delete share the row locks, so a
-    /// concurrent revival either wins the lock first and is skipped, or waits and then inserts a
-    /// fresh person. Idempotent: uuids with no row contribute to no bucket.
+    /// Hard-delete persons that are still tombstoned under the row locks the delete holds, so a
+    /// concurrent revival is either skipped or lands afterwards on a fresh row. Skips persons
+    /// that are live again or still own a live distinct id; idempotent.
     async fn delete_tombstoned_persons(
         &self,
         team_id: i64,

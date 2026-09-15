@@ -484,7 +484,10 @@ impl PersonHogReplica for PersonHogReplicaService {
         let req = request.into_inner();
         let uuid = Uuid::parse_str(&req.person_uuid)
             .map_err(|e| Status::invalid_argument(format!("Invalid UUID: {e}")))?;
-        let max_rows = if req.max_rows <= 0 {
+        if req.max_rows < 0 {
+            return Err(Status::invalid_argument("max_rows must not be negative"));
+        }
+        let max_rows = if req.max_rows == 0 {
             TRIM_DEFAULT_ROWS
         } else {
             req.max_rows

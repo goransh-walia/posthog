@@ -2933,8 +2933,7 @@ async fn test_delete_tombstoned_persons_single_person(
             .tombstone_person(person.id, Some("tomb_single_2"))
             .await
             .unwrap(),
-        // The test storage caps every dependent table at 3 rows; a fourth row puts the person
-        // over in that table alone.
+        // The test cap is 3 rows per table; a fourth row puts the person over in that table alone.
         SeededState::TombstonedOversizedDistinctIds => {
             for suffix in ["3", "4"] {
                 ctx.add_distinct_id_to_person(person.id, &format!("tomb_single_{suffix}"))
@@ -2963,6 +2962,8 @@ async fn test_delete_tombstoned_persons_single_person(
     }
     let rows_kept = expected_deleted == 0;
     let distinct_ids_before = ctx.distinct_id_row_count(person.id).await.unwrap();
+    let memberships_before = ctx.cohort_membership_count(person.id).await.unwrap();
+    let overrides_before = ctx.hash_key_override_count(person.id).await.unwrap();
 
     let outcome = ctx
         .storage
@@ -2990,8 +2991,6 @@ async fn test_delete_tombstoned_persons_single_person(
         ctx.distinct_id_row_count(person.id).await.unwrap(),
         expected_distinct_ids
     );
-    let memberships_before = ctx.cohort_membership_count(person.id).await.unwrap();
-    let overrides_before = ctx.hash_key_override_count(person.id).await.unwrap();
     assert_eq!(
         ctx.cohort_membership_count(person.id).await.unwrap(),
         if rows_kept { memberships_before } else { 0 }
@@ -3006,8 +3005,7 @@ async fn test_delete_tombstoned_persons_single_person(
 
 #[tokio::test]
 async fn test_delete_tombstoned_persons_groups_transactions_by_row_budget() {
-    // The test storage allows 9 dependent rows per transaction. Five persons with 3 distinct ids
-    // each must split into transactions, and every one of them still has to go.
+    // Test budget is 9 rows per transaction, so five persons of 3 rows split across transactions.
     let ctx = TestContext::new().await;
     let mut persons = Vec::new();
     for i in 0..5 {
@@ -3047,8 +3045,7 @@ async fn test_delete_tombstoned_persons_groups_transactions_by_row_budget() {
 
 #[tokio::test]
 async fn test_trim_tombstoned_person_deletes_dependents_in_bounded_steps() {
-    // Cap 3 per table, trim clamp 10. The person is over the cap in every table: 5 tombstoned
-    // distinct ids, 4 overrides, 4 cohort memberships.
+    // Test cap 3 per table, trim clamp 10; the person is over the cap in every table.
     let ctx = TestContext::new().await;
     let person = ctx.insert_person("trim_steps", None).await.unwrap();
     for i in 0..4 {
@@ -3155,8 +3152,8 @@ async fn test_trim_tombstoned_person_clamps_the_step_to_the_server_maximum() {
 
 #[tokio::test]
 async fn test_trim_tombstoned_person_leaves_live_distinct_ids_and_reports_over_cap() {
-    // A tombstoned person whose distinct ids are all still live: nothing may go, and over_cap
-    // with nothing deleted is how the caller learns the person is blocked rather than oversized.
+    // Live distinct ids never go; over_cap with nothing deleted tells the caller the person is
+    // blocked, not oversized.
     let ctx = TestContext::new().await;
     let person = ctx.insert_person("trim_live", None).await.unwrap();
     for i in 0..3 {
@@ -3374,9 +3371,8 @@ async fn test_delete_tombstoned_persons_cross_team_isolation() {
 
 #[tokio::test]
 async fn test_delete_tombstoned_persons_gives_up_when_a_writer_holds_the_row() {
-    // The chunk sets lock_timeout so a person mid-revival makes the request fail fast instead of
-    // queueing behind live ingestion traffic. Without it this call would block until the holder
-    // commits, which for a drain means hanging behind the persons writer.
+    // lock_timeout makes the request fail fast behind a held row; without it this call would
+    // block until the holder commits.
     let ctx = TestContext::new().await;
     let person = ctx.insert_person("tomb_locked", None).await.unwrap();
     ctx.tombstone_person(person.id, None).await.unwrap();
